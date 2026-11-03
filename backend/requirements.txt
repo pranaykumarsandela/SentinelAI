@@ -1,0 +1,37 @@
+# SentinelAI Backend Requirements
+
+# Core API & ASGI Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.2
+pydantic-settings>=2.6.0
+python-multipart>=0.0.12
+
+# Database & ORM
+SQLAlchemy>=2.0.35
+alembic>=1.13.3
+asyncpg>=0.29.0
+aiosqlite>=0.20.0
+greenlet>=3.1.1
+
+# AI & Orchestration
+langgraph>=0.2.39
+langchain>=0.3.4
+langchain-core>=0.3.10
+langchain-community>=0.3.3
+openai>=1.52.0
+groq>=0.11.0
+
+# Vector Database & Retrieval
+qdrant-client>=1.12.0
+rank-bm25>=0.2.2
+
+# Testing & Evaluation
+pytest>=8.3.3
+pytest-asyncio>=0.24.0
+httpx>=0.27.2
+
+# Utilities
+python-dotenv>=1.0.1
+pytz>=2024.2
+uuid6>=2024.7.10
