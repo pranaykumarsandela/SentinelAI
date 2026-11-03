@@ -273,3 +273,4 @@ $$PID_{score} = \frac{\sum_{i=1}^{M} \mathbb{I}(\text{test}_i = \text{successful
 | **Phase 6** | **Evaluation & Adversarial Suite** | RAGAS metrics, 100+ adversarial prompt test set, automated benchmark runner. | Planned |
 | **Phase 7** | **React + TypeScript Dashboard** | Dashboard UI, Real-time Guardrail logs, Policy editor, HITL Queue, Trace viewer, Zero-data empty states. | Planned |
 | **Phase 8** | **Dockerization & Verification** | Multi-container Docker Compose, integration test suite, documentation, end-to-end verification. | Planned |
+

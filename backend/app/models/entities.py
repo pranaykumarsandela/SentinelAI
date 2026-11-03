@@ -80,6 +80,13 @@ class EvaluationStatus(str, enum.Enum):
     FAILED = "FAILED"
 
 
+class IngestionStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 # --- Database Models ---
 
 class Tenant(Base):
@@ -93,6 +100,8 @@ class Tenant(Base):
     agents: Mapped[List["Agent"]] = relationship("Agent", back_populates="tenant", cascade="all, delete-orphan")
     policies: Mapped[List["SecurityPolicy"]] = relationship("SecurityPolicy", back_populates="tenant", cascade="all, delete-orphan")
     traces: Mapped[List["ExecutionTrace"]] = relationship("ExecutionTrace", back_populates="tenant", cascade="all, delete-orphan")
+    documents: Mapped[List["Document"]] = relationship("Document", back_populates="tenant", cascade="all, delete-orphan")
+    retrieval_events: Mapped[List["RetrievalEvent"]] = relationship("RetrievalEvent", back_populates="tenant", cascade="all, delete-orphan")
 
 
 class Agent(Base):
@@ -277,3 +286,68 @@ class EvaluationResult(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     evaluation_run: Mapped["EvaluationRun"] = relationship("EvaluationRun", back_populates="results")
+
+
+# --- RAG Subsystem Models ---
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str] = mapped_column(String(20), nullable=False)  # PDF, TXT, MARKDOWN, DOCX
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
+    
+    status: Mapped[str] = mapped_column(String(20), default=IngestionStatus.PENDING.value)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    total_chunks: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    doc_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="documents")
+    chunks: Mapped[List["DocumentChunk"]] = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    page_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    start_char: Mapped[int] = mapped_column(Integer, default=0)
+    end_char: Mapped[int] = mapped_column(Integer, default=0)
+    
+    qdrant_point_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    chunk_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped["Document"] = relationship("Document", back_populates="chunks")
+
+
+class RetrievalEvent(Base):
+    __tablename__ = "retrieval_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    query: Mapped[str] = mapped_column(Text, nullable=False)
+    rewritten_query: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    is_relevant: Mapped[bool] = mapped_column(Boolean, default=True)
+    grader_reasoning: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    groundedness_verdict: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # GROUNDED, UNGROUNDED, INSUFFICIENT_EVIDENCE
+    
+    retrieved_chunks: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Stores retrieved chunk IDs, documents, scores
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="retrieval_events")

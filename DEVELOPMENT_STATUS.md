@@ -1,7 +1,7 @@
 # SentinelAI – Development Status & Roadmap Tracker
 
-**Current Phase:** Phase 1 – Architecture & Workspace Foundations (Completed & Verified)  
-**Next Phase:** Phase 2 – Security Guardrails & Policy Engine  
+**Current Phase:** Phase 3 – Agentic RAG Subsystem (Completed & Verified)  
+**Next Phase:** Phase 2 / Phase 4 – Security Guardrails & Policy Firewall / LangGraph Agent Integration  
 **Last Updated:** November 2026  
 **Lead Engineering Agent:** Antigravity Architect  
 
@@ -22,12 +22,29 @@
   - [x] Package and dependency management (`requirements.txt`, `pyproject.toml`)
   - [x] Environment configuration (`.env.example`, `.env`, `backend/app/core/config.py`)
   - [x] Database abstraction layer (SQLAlchemy 2.0 Async, connection pooling, SQLite & PostgreSQL engine)
-  - [x] Complete relational entity models (`Tenant`, `Agent`, `SecurityPolicy`, `PolicyRule`, `ExecutionTrace`, `TraceSpan`, `SecurityEvent`, `ApprovalRequest`, `EvaluationRun`, `EvaluationResult`)
-  - [x] Pydantic v2 schemas (`common.py`, `entities.py`)
+  - [x] Complete relational entity models (`Tenant`, `Agent`, `SecurityPolicy`, `PolicyRule`, `ExecutionTrace`, `TraceSpan`, `SecurityEvent`, `ApprovalRequest`, `EvaluationRun`, `EvaluationResult`, `Document`, `DocumentChunk`, `RetrievalEvent`)
+  - [x] Pydantic v2 schemas (`common.py`, `entities.py`, `rag.py`)
   - [x] Deterministic Mock LLM Provider enforcing Mandatory Data Integrity Policy (`backend/app/services/mock_llm.py`)
   - [x] Base FastAPI application with lifespan management, CORS, and health endpoints (`backend/app/main.py`)
   - [x] Phase 1 Automated Test Suite (`backend/tests/test_foundations.py` – 5/5 tests passing)
   - [x] Git version control initialization with initial commit
+
+- [x] **Phase 3: Agentic RAG Subsystem & Context Security**
+  - [x] Ingestion pipeline for PDF, TXT, Markdown, and DOCX (`backend/app/rag/document_loaders.py`)
+  - [x] Recursive Character Text Splitter with provenance offsets (`backend/app/rag/chunking.py`)
+  - [x] 384-dimensional dense semantic embedding engine with L2 normalization (`backend/app/rag/embeddings.py`)
+  - [x] Qdrant Vector Database adapter with RFC 4122 UUID normalization and in-memory fallback (`backend/app/rag/qdrant_store.py`)
+  - [x] Hybrid Retriever: Dense Vector Search + BM25Plus Keyword Search + Reciprocal Rank Fusion (RRF $k=60$) + Cross-Encoder Reranker (`backend/app/rag/hybrid_retriever.py`)
+  - [x] Indirect Prompt Injection Defense Scrubber & Untrusted Context Isolator (`backend/app/rag/prompt_injection_guard.py`)
+  - [x] LangGraph Agentic StateGraph:
+    * `QUERY_ANALYSIS` -> `RETRIEVAL_DECISION` -> `DOCUMENT_RETRIEVAL` -> `RETRIEVAL_GRADER`
+    * Poor retrieval loop: `QUERY_REWRITER` -> `DOCUMENT_RETRIEVAL` (max 2 retries)
+    * `CONTEXT_VALIDATION` -> `ANSWER_GENERATION` -> `GROUNDEDNESS_CHECK` -> `FINAL_RESPONSE`
+    * Verified citations referencing actual stored document IDs, filenames, page numbers, chunk IDs
+    * Explicit fallback response on insufficient evidence
+  - [x] Relational Database persistence for documents, chunks, and audit `RetrievalEvent` records (`backend/app/rag/service.py`)
+  - [x] REST API endpoints (`/api/v1/documents/upload`, `/api/v1/documents`, `/api/v1/documents/{id}`, `/api/v1/rag/query`, `/api/v1/rag/retrievals`)
+  - [x] Automated Test Suite (`backend/tests/test_rag_subsystem.py` – 9/9 tests passing)
 
 - [ ] **Phase 2: Core Security Engine & Policy Firewall**
   - [ ] Prompt injection heuristic and semantic analyzer
@@ -35,12 +52,6 @@
   - [ ] PII detection, redaction, and reversible tokenization
   - [ ] Tool authorization ABAC engine with risk tiers
   - [ ] Human-In-The-Loop (HITL) approval queue and resumption flow
-
-- [ ] **Phase 3: Hybrid RAG Engine & Context Security**
-  - [ ] Qdrant dense vector store client & indexing
-  - [ ] BM25 sparse lexical search engine
-  - [ ] Hybrid Reciprocal Rank Fusion (RRF) & Cross-Encoder reranker
-  - [ ] Indirect prompt injection scrubber for retrieved chunks
 
 - [ ] **Phase 4: LangGraph Agent Orchestrator**
   - [ ] Multi-provider abstraction (`BaseLLMProvider`, `GroqProvider`, `OpenAIProvider`, `MockLLMProvider`)
@@ -83,6 +94,9 @@
 
 | Metric Category | Source Table | Aggregation Strategy | Zero State Verified |
 |---|---|---|---|
+| Total Documents | `documents` | `COUNT(*)` | Yes (0) |
+| Total Chunks Indexed | `document_chunks` | `COUNT(*)` | Yes (0) |
+| Total Retrieval Queries | `retrieval_events` | `COUNT(*)` | Yes (0) |
 | Total Executions | `execution_traces` | `COUNT(*)` | Yes (0) |
 | Threats Detected | `security_events` | `COUNT(*)` | Yes (0) |
 | Defense Efficacy Rate | `security_events` | `COUNT(action='BLOCKED') / COUNT(*)` | Yes (N/A or 100%) |
@@ -101,4 +115,13 @@ Executed on November 4, 2026:
 - `backend/tests/test_foundations.py::test_deterministic_mock_llm_tool_simulation` **PASSED**
 - `backend/tests/test_foundations.py::test_database_models_persistence` **PASSED**
 - `backend/tests/test_foundations.py::test_fastapi_endpoints` **PASSED**
-- **Test Result:** 5/5 passed (100% success rate)
+- `backend/tests/test_rag_subsystem.py::test_document_loaders_txt_md_docx` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_document_chunking` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_embedding_service` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_hybrid_retrieval_and_cross_encoder` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_indirect_prompt_injection_guard` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_execution_grounded` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_poor_retrieval_retry_and_insufficient_evidence` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_agentic_rag_empty_corpus` **PASSED**
+- `backend/tests/test_rag_subsystem.py::test_full_rag_api_lifecycle` **PASSED**
+- **Test Result:** 14/14 passed (100% success rate across all suites)

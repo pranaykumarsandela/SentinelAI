@@ -47,3 +47,4 @@ async def root():
         "docs": "/docs",
         "environment": settings.ENVIRONMENT
     }
+
