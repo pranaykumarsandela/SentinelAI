@@ -1,7 +1,7 @@
 # SentinelAI – Development Status & Roadmap Tracker
 
-**Current Phase:** Phase 3 – Agentic RAG Subsystem (Completed & Verified)  
-**Next Phase:** Phase 2 / Phase 4 – Security Guardrails & Policy Firewall / LangGraph Agent Integration  
+**Current Phase:** Phase 2 – Centralized AI Security Engine (Completed & Verified)  
+**Next Phase:** Phase 4 / Phase 5 – Agent Orchestrator & Observability Suite  
 **Last Updated:** November 2026  
 **Lead Engineering Agent:** Antigravity Architect  
 
@@ -23,11 +23,41 @@
   - [x] Environment configuration (`.env.example`, `.env`, `backend/app/core/config.py`)
   - [x] Database abstraction layer (SQLAlchemy 2.0 Async, connection pooling, SQLite & PostgreSQL engine)
   - [x] Complete relational entity models (`Tenant`, `Agent`, `SecurityPolicy`, `PolicyRule`, `ExecutionTrace`, `TraceSpan`, `SecurityEvent`, `ApprovalRequest`, `EvaluationRun`, `EvaluationResult`, `Document`, `DocumentChunk`, `RetrievalEvent`)
-  - [x] Pydantic v2 schemas (`common.py`, `entities.py`, `rag.py`)
+  - [x] Pydantic v2 schemas (`common.py`, `entities.py`, `rag.py`, `security.py`)
   - [x] Deterministic Mock LLM Provider enforcing Mandatory Data Integrity Policy (`backend/app/services/mock_llm.py`)
   - [x] Base FastAPI application with lifespan management, CORS, and health endpoints (`backend/app/main.py`)
   - [x] Phase 1 Automated Test Suite (`backend/tests/test_foundations.py` – 5/5 tests passing)
   - [x] Git version control initialization with initial commit
+
+- [x] **Phase 2: Centralized AI Security Engine & Policy Firewall**
+  - [x] **Module 1: Input Security Guard** (`backend/app/security/input_guard.py`):
+    * Deterministic prompt injection heuristic detector
+    * Known jailbreak pattern & persona subversion detector
+    * Obfuscation decoder (Base64/hex payload scanning)
+    * PII detection (Email, Phone, SSN, Luhn-checked Credit Card, IPv4, API keys, Private keys)
+    * Input length & token-bombing protection
+    * Malicious destructive instruction classifier
+  - [x] **Module 2: Tool Permission Engine** (`backend/app/security/tool_registry.py` & `backend/app/security/tool_policy_engine.py`):
+    * Centralized tool registry with schemas, allowed roles, execution timeouts, rate limits
+    * Initial implemented tools: `search_documents`, `retrieve_document`, `check_order_status` (local verified dataset), `create_support_ticket`, `request_refund`
+    * Server-side authorization checkpoint: blocks direct unauthorized LLM-to-tool executions
+  - [x] **Module 3: Human-In-The-Loop (HITL) Approval Engine** (`backend/app/security/approval_engine.py`):
+    * Finite state machine: `PENDING`, `APPROVED`, `REJECTED`, `EXPIRED`, `EXECUTED`
+    * Approver role verification (supervisor/admin only)
+    * Time-based expiration evaluation (auto-expires unreviewed requests)
+    * Server-side enforcement: Rejected or expired actions are strictly unexecutable
+  - [x] **Module 4: Output Guardrails** (`backend/app/security/output_guard.py`):
+    * Egress PII & secret redaction
+    * Citation provenance verification against real document IDs
+    * Groundedness & unsupported claim scoring
+    * System prompt & credential leakage defense
+    * Actions: `ALLOW`, `REDACT`, `FLAG`, `BLOCK`, `HUMAN_REVIEW`
+  - [x] **Module 5: Security Event Storage** (`backend/app/security/event_recorder.py`):
+    * Full database persistence (`security_events` table)
+    * Redacts sensitive evidence (PII/secrets) before storing in DB
+    * Zero fabricated records
+  - [x] **Module 6: Security Verification Suite** (`backend/tests/test_security_engine.py` – 12/12 tests passing):
+    * All 11 required scenarios + REST API integration verified
 
 - [x] **Phase 3: Agentic RAG Subsystem & Context Security**
   - [x] Ingestion pipeline for PDF, TXT, Markdown, and DOCX (`backend/app/rag/document_loaders.py`)
@@ -36,22 +66,10 @@
   - [x] Qdrant Vector Database adapter with RFC 4122 UUID normalization and in-memory fallback (`backend/app/rag/qdrant_store.py`)
   - [x] Hybrid Retriever: Dense Vector Search + BM25Plus Keyword Search + Reciprocal Rank Fusion (RRF $k=60$) + Cross-Encoder Reranker (`backend/app/rag/hybrid_retriever.py`)
   - [x] Indirect Prompt Injection Defense Scrubber & Untrusted Context Isolator (`backend/app/rag/prompt_injection_guard.py`)
-  - [x] LangGraph Agentic StateGraph:
-    * `QUERY_ANALYSIS` -> `RETRIEVAL_DECISION` -> `DOCUMENT_RETRIEVAL` -> `RETRIEVAL_GRADER`
-    * Poor retrieval loop: `QUERY_REWRITER` -> `DOCUMENT_RETRIEVAL` (max 2 retries)
-    * `CONTEXT_VALIDATION` -> `ANSWER_GENERATION` -> `GROUNDEDNESS_CHECK` -> `FINAL_RESPONSE`
-    * Verified citations referencing actual stored document IDs, filenames, page numbers, chunk IDs
-    * Explicit fallback response on insufficient evidence
+  - [x] LangGraph Agentic StateGraph (9-node graph with retries, grading, grounded answers, verified citations)
   - [x] Relational Database persistence for documents, chunks, and audit `RetrievalEvent` records (`backend/app/rag/service.py`)
   - [x] REST API endpoints (`/api/v1/documents/upload`, `/api/v1/documents`, `/api/v1/documents/{id}`, `/api/v1/rag/query`, `/api/v1/rag/retrievals`)
   - [x] Automated Test Suite (`backend/tests/test_rag_subsystem.py` – 9/9 tests passing)
-
-- [ ] **Phase 2: Core Security Engine & Policy Firewall**
-  - [ ] Prompt injection heuristic and semantic analyzer
-  - [ ] Jailbreak pattern recognition and classifier
-  - [ ] PII detection, redaction, and reversible tokenization
-  - [ ] Tool authorization ABAC engine with risk tiers
-  - [ ] Human-In-The-Loop (HITL) approval queue and resumption flow
 
 - [ ] **Phase 4: LangGraph Agent Orchestrator**
   - [ ] Multi-provider abstraction (`BaseLLMProvider`, `GroqProvider`, `OpenAIProvider`, `MockLLMProvider`)
@@ -110,18 +128,19 @@
 ## 3. Test Verification Record
 
 Executed on November 4, 2026:
-- `backend/tests/test_foundations.py::test_settings_loaded` **PASSED**
-- `backend/tests/test_foundations.py::test_deterministic_mock_llm` **PASSED**
-- `backend/tests/test_foundations.py::test_deterministic_mock_llm_tool_simulation` **PASSED**
-- `backend/tests/test_foundations.py::test_database_models_persistence` **PASSED**
-- `backend/tests/test_foundations.py::test_fastapi_endpoints` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_document_loaders_txt_md_docx` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_document_chunking` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_embedding_service` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_hybrid_retrieval_and_cross_encoder` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_indirect_prompt_injection_guard` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_execution_grounded` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_poor_retrieval_retry_and_insufficient_evidence` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_agentic_rag_empty_corpus` **PASSED**
-- `backend/tests/test_rag_subsystem.py::test_full_rag_api_lifecycle` **PASSED**
-- **Test Result:** 14/14 passed (100% success rate across all suites)
+- `backend/tests/test_foundations.py` (5 tests) **PASSED**
+- `backend/tests/test_rag_subsystem.py` (9 tests) **PASSED**
+- `backend/tests/test_security_engine.py` (12 tests) **PASSED**:
+  1. `test_normal_request_allowed` **PASSED**
+  2. `test_direct_prompt_injection_blocked` **PASSED**
+  3. `test_jailbreak_attempt_blocked` **PASSED**
+  4. `test_indirect_injection_through_retrieved_documents` **PASSED**
+  5. `test_unauthorized_tool_invocation` **PASSED**
+  6. `test_invalid_refund_amount` **PASSED**
+  7. `test_approval_bypass_attempt` **PASSED**
+  8. `test_rejected_approval` **PASSED**
+  9. `test_expired_approval` **PASSED**
+  10. `test_pii_leakage_in_output` **PASSED**
+  11. `test_policy_engine_unavailable_fail_closed` **PASSED**
+  12. `test_security_api_endpoints` **PASSED**
+- **Test Result:** 26/26 passed (100% success rate across all suites)

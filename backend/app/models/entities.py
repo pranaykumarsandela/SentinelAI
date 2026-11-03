@@ -46,6 +46,11 @@ class SecurityEventType(str, enum.Enum):
     PII_DETECTED = "PII_DETECTED"
     UNAUTHORIZED_TOOL = "UNAUTHORIZED_TOOL"
     DATA_LEAK = "DATA_LEAK"
+    APPROVAL_BYPASS = "APPROVAL_BYPASS"
+    MALICIOUS_INSTRUCTION = "MALICIOUS_INSTRUCTION"
+    INPUT_LENGTH_VIOLATION = "INPUT_LENGTH_VIOLATION"
+    POLICY_VIOLATION = "POLICY_VIOLATION"
+    INDIRECT_PROMPT_INJECTION = "INDIRECT_PROMPT_INJECTION"
 
 
 class SecuritySeverity(str, enum.Enum):
@@ -60,6 +65,7 @@ class ApprovalStatus(str, enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
+    EXECUTED = "EXECUTED"
 
 
 class RuleType(str, enum.Enum):
@@ -214,25 +220,28 @@ class SecurityEvent(Base):
     __tablename__ = "security_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
-    trace_id: Mapped[str] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=False)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    agent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     
     event_type: Mapped[str] = mapped_column(String(50), default=SecurityEventType.PROMPT_INJECTION.value)
     severity: Mapped[str] = mapped_column(String(20), default=SecuritySeverity.HIGH.value)
     confidence_score: Mapped[float] = mapped_column(Float, default=1.0)
     detector_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    detection_method: Mapped[str] = mapped_column(String(50), default="DETERMINISTIC_HEURISTIC")
     
     details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     action_taken: Mapped[str] = mapped_column(String(20), default="BLOCKED")  # BLOCKED, REDACTED, LOGGED
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
-    trace: Mapped["ExecutionTrace"] = relationship("ExecutionTrace", back_populates="security_events")
+    trace: Mapped[Optional["ExecutionTrace"]] = relationship("ExecutionTrace", back_populates="security_events")
 
 
 class ApprovalRequest(Base):
     __tablename__ = "approval_requests"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
-    trace_id: Mapped[str] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=False)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=True)
     
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     tool_arguments: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -240,11 +249,13 @@ class ApprovalRequest(Base):
     
     status: Mapped[str] = mapped_column(String(20), default=ApprovalStatus.PENDING.value)
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewer_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reviewer_role: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    trace: Mapped["ExecutionTrace"] = relationship("ExecutionTrace", back_populates="approval_requests")
+    trace: Mapped[Optional["ExecutionTrace"]] = relationship("ExecutionTrace", back_populates="approval_requests")
 
 
 class EvaluationRun(Base):
