@@ -7,11 +7,15 @@ from backend.app.api.v1.tools import tools_router
 from backend.app.api.v1.approvals import approvals_router
 from backend.app.api.v1.evaluations import evaluations_router
 from backend.app.api.v1.dashboard import dashboard_router
+from backend.app.api.v1.agents import router as agents_router
+from backend.app.api.v1.traces import router as traces_router
 
 api_v1_router = APIRouter(prefix="/v1")
 
 # Subsystem Routers
 api_v1_router.include_router(dashboard_router)
+api_v1_router.include_router(agents_router)
+api_v1_router.include_router(traces_router)
 api_v1_router.include_router(evaluations_router)
 api_v1_router.include_router(security_router)
 api_v1_router.include_router(tools_router)

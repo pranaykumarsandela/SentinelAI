@@ -183,3 +183,4 @@ Allowed / Not Blocked    FN                   TN
   $$\text{Context Recall} = \frac{|\text{Ground Truth Sentences Captured in Context}|}{|\text{Total Ground Truth Sentences}|}$$
 - **Denominator:** Total propositions in ground-truth answer.
 - **Empty-Data Behavior:** Returns `null` if ground truth is not provided.
+

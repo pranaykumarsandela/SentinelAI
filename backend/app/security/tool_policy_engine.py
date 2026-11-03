@@ -2,6 +2,7 @@ import asyncio
 import jsonschema
 import time
 from typing import Any, Dict, List, Optional
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.entities import SecurityEventType, SecuritySeverity, ApprovalStatus
@@ -18,6 +19,14 @@ class PolicyEngineUnavailableError(Exception):
 class ToolPolicyViolationError(Exception):
     """Raised when a tool invocation violates security policies."""
     pass
+
+
+class ToolEvaluationResult(BaseModel):
+    is_authorized: bool
+    is_blocked: bool
+    requires_approval: bool
+    reason: Optional[str] = None
+    tool_def: Optional[ToolDefinition] = None
 
 
 class ToolPolicyEngine:
@@ -38,6 +47,70 @@ class ToolPolicyEngine:
     def set_availability(self, available: bool) -> None:
         """Simulates engine availability for testing fail-closed resilience."""
         self.is_available = available
+
+    def evaluate_tool_call(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        user_role: str = "user",
+        user_id: Optional[str] = None,
+    ) -> ToolEvaluationResult:
+        """
+        Pre-execution authorization and policy verification checkpoint.
+        Validates availability, registration, role permission, schema, and approval requirements.
+        """
+        if not self.is_available:
+            return ToolEvaluationResult(
+                is_authorized=False,
+                is_blocked=True,
+                requires_approval=False,
+                reason="Policy engine unavailable; failing closed."
+            )
+
+        tool_def = tool_registry.get_tool(tool_name)
+        if not tool_def:
+            return ToolEvaluationResult(
+                is_authorized=False,
+                is_blocked=True,
+                requires_approval=False,
+                reason=f"Tool '{tool_name}' is not registered in the system."
+            )
+
+        if user_role.lower() not in [r.lower() for r in tool_def.allowed_roles]:
+            return ToolEvaluationResult(
+                is_authorized=False,
+                is_blocked=True,
+                requires_approval=False,
+                reason=f"Role '{user_role}' is not authorized to execute tool '{tool_name}'. Allowed roles: {tool_def.allowed_roles}",
+                tool_def=tool_def,
+            )
+
+        try:
+            jsonschema.validate(instance=arguments, schema=tool_def.input_schema)
+        except jsonschema.ValidationError as ve:
+            return ToolEvaluationResult(
+                is_authorized=False,
+                is_blocked=True,
+                requires_approval=False,
+                reason=f"Invalid parameters for tool '{tool_name}': {ve.message}",
+                tool_def=tool_def,
+            )
+
+        if tool_def.approval_required:
+            return ToolEvaluationResult(
+                is_authorized=False,
+                is_blocked=False,
+                requires_approval=True,
+                reason=f"Tool '{tool_name}' requires human approval before execution.",
+                tool_def=tool_def,
+            )
+
+        return ToolEvaluationResult(
+            is_authorized=True,
+            is_blocked=False,
+            requires_approval=False,
+            tool_def=tool_def,
+        )
 
     async def authorize_and_execute(
         self,

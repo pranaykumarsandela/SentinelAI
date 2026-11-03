@@ -48,9 +48,22 @@ class DeterministicMockLLM:
         # Deterministic response rules based on input pattern
         if simulate_tool_call:
             content = f"I will now execute the tool: {simulate_tool_call} to complete your request."
+            if simulate_tool_call == "check_order_status":
+                args = {"order_id": "ORD-1001"}
+            elif simulate_tool_call == "request_refund":
+                args = {"order_id": "ORD-1001", "amount": 45.0, "reason": "Defective item on delivery"}
+            elif simulate_tool_call == "search_documents":
+                args = {"query": prompt, "top_k": 3}
+            elif simulate_tool_call == "retrieve_document":
+                args = {"document_id": "doc_sample_001"}
+            elif simulate_tool_call == "create_support_ticket":
+                args = {"customer_id": "CUST-001", "issue_summary": "Order inquiry assistance needed"}
+            else:
+                args = {"query": prompt, "action": "execute"}
+
             tool_calls.append({
                 "name": simulate_tool_call,
-                "arguments": {"query": prompt, "action": "execute"},
+                "arguments": args,
                 "id": "mock_call_001"
             })
         elif "delete" in prompt_lower or "drop" in prompt_lower or "transfer" in prompt_lower:

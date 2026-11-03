@@ -61,3 +61,4 @@ async def get_dashboard_timeseries(
         success=True,
         data=points
     )
+

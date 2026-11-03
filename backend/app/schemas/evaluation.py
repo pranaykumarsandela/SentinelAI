@@ -58,3 +58,4 @@ class EvaluationRunRead(BaseModel):
 
 class EvaluationRunDetailRead(EvaluationRunRead):
     results: List[EvaluationResultRead] = []
+

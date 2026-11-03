@@ -1,4 +1,6 @@
+import asyncio
 import enum
+import inspect
 from typing import Any, Callable, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -57,6 +59,12 @@ LOCAL_ORDER_DATABASE: Dict[str, Dict[str, Any]] = {
 }
 
 
+class ToolExecutionResult(BaseModel):
+    success: bool
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
 class ToolRegistry:
     """Centralized Tool Registry for SentinelAI Agent Runtime."""
 
@@ -72,11 +80,24 @@ class ToolRegistry:
     def get_tool(self, name: str) -> Optional[ToolDefinition]:
         return self._tools.get(name)
 
+
     def get_handler(self, name: str) -> Optional[Callable]:
         return self._handlers.get(name)
 
     def list_tools(self) -> List[ToolDefinition]:
         return list(self._tools.values())
+
+    async def execute_tool(self, name: str, args: Dict[str, Any]) -> ToolExecutionResult:
+        handler = self.get_handler(name)
+        if not handler:
+            return ToolExecutionResult(success=False, error=f"Tool '{name}' has no registered handler.")
+        try:
+            res = handler(args)
+            if inspect.isawaitable(res):
+                res = await res
+            return ToolExecutionResult(success=True, data=res)
+        except Exception as e:
+            return ToolExecutionResult(success=False, error=str(e))
 
     def _register_default_tools(self) -> None:
         # Tool 1: search_documents

@@ -244,3 +244,4 @@ class SecurityBenchmarkRunner:
 
 
 security_benchmark_runner = SecurityBenchmarkRunner()
+

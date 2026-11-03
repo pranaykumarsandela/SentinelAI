@@ -156,3 +156,4 @@ async def get_evaluation_metrics_summary(
             "avg_security_recall": round(sum(sr_vals) / len(sr_vals), 4) if sr_vals else None,
         }
     )
+
