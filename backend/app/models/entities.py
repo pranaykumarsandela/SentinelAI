@@ -262,22 +262,38 @@ class EvaluationRun(Base):
     __tablename__ = "evaluation_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
-    agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=True)
     dataset_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String(20), default="v1.0")
+    run_type: Mapped[str] = mapped_column(String(30), default="SECURITY")  # RAG, SECURITY, FULL
+    model_identifier: Mapped[str] = mapped_column(String(100), default="mock-sentinel-v1")
+    prompt_version: Mapped[str] = mapped_column(String(20), default="v1")
     
     total_samples: Mapped[int] = mapped_column(Integer, default=0)
     passed_samples: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default=EvaluationStatus.RUNNING.value)
     
+    # RAG Metrics
     faithfulness_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     relevance_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    context_precision_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    context_recall_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    # Security Metrics (Confusion Matrix & Derivatives)
+    security_precision: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    security_recall: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    security_f1: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    security_fpr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     security_robustness_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    confusion_matrix: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {TP, FP, TN, FN}
+    
+    errors: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     is_mock: Mapped[bool] = mapped_column(Boolean, default=True)
     
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    agent: Mapped["Agent"] = relationship("Agent", back_populates="evaluations")
+    agent: Mapped[Optional["Agent"]] = relationship("Agent", back_populates="evaluations")
     results: Mapped[List["EvaluationResult"]] = relationship("EvaluationResult", back_populates="evaluation_run", cascade="all, delete-orphan")
 
 
@@ -288,12 +304,14 @@ class EvaluationResult(Base):
     evaluation_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("evaluation_runs.id", ondelete="CASCADE"), nullable=False)
     
     sample_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), default="GENERAL")
     input_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     expected_behavior: Mapped[str] = mapped_column(String(100), nullable=False)
     actual_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     passed: Mapped[bool] = mapped_column(Boolean, default=False)
     metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     evaluation_run: Mapped["EvaluationRun"] = relationship("EvaluationRun", back_populates="results")

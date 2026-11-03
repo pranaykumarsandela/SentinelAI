@@ -1,7 +1,7 @@
 # SentinelAI – Development Status & Roadmap Tracker
 
-**Current Phase:** Phase 2 – Centralized AI Security Engine (Completed & Verified)  
-**Next Phase:** Phase 4 / Phase 5 – Agent Orchestrator & Observability Suite  
+**Current Phase:** Phase 5 – LangGraph Agent Orchestrator & Observability Suite  
+**Next Phase:** Phase 6 – Full-Stack React Frontend  
 **Last Updated:** November 2026  
 **Lead Engineering Agent:** Antigravity Architect  
 
@@ -77,19 +77,45 @@
   - [ ] Ingress guard -> Context retrieval -> Tool planning -> Tool authorization -> Execution -> Egress guard
   - [ ] State persistence & checkpointing
 
-- [ ] **Phase 5: Observability, Traces & Audit Logging**
-  - [ ] OpenTelemetry & Langfuse-compatible trace schema
-  - [ ] Token usage, latency, and cost calculator
-  - [ ] Execution trace recorder & span hierarchy
+- [x] **Phase 4: AI Evaluation & Metrics Engine (Data Integrity Enforced)**
+  - [x] **Module 1: RAGAS Evaluation Engine** (`backend/app/evaluation/ragas_engine.py`):
+    * Faithfulness: verifies claim grounding against retrieved contexts (returns None with reason on missing context)
+    * Answer Relevancy: semantic cross-encoder interaction combined with root stem coverage
+    * Context Precision: MAP@K ranking precision over retrieved contexts
+    * Context Recall: ground-truth sentence coverage against retrieved context
+    * Rigorous zero-simulation enforcement: deterministic scoring, missing data returns None with explicit diagnostic reason
+  - [x] **Module 2: Security Evaluation & Labeled Benchmarks** (`backend/app/evaluation/security_benchmarks.py`):
+    * Labeled adversarial & benign dataset: Direct Injection, Indirect Injection, Jailbreak, PII Extraction, Unauthorized Tool, Malicious Docs, Benign Queries
+    * Deterministic Confusion Matrix calculation: TP, FP, TN, FN, Precision, Recall, F1, FPR, Accuracy
+    * Zero-denominator mathematical handling (returns None/N/A, never division by zero or fabricated scores)
+  - [x] **Module 3: Database-Backed Production Metrics Calculator** (`backend/app/evaluation/metrics_calculator.py`):
+    * Derived strictly from persisted database records (`execution_traces`, `trace_spans`, `security_events`)
+    * Total, Successful, Blocked, Failed request counts and rates
+    * Latency statistics: Average, Median (P50), P95, P99 calculated via real percentile interpolation
+    * Actual token consumption partitioned between mock and live providers
+    * Verified Fresh-Install Zero State: clean database yields exact 0 counts and empty states
+  - [x] **Module 4: Metric Documentation** (`METRIC_DEFINITIONS.md`):
+    * Complete documentation of formula, data source, SQL aggregation, denominator, sample size, limitations, and empty-data behavior for every metric
+  - [x] **Module 5: Regression Evaluation Engine** (`backend/app/evaluation/regression_engine.py`):
+    * Compares baseline vs. candidate evaluation runs with delta calculations
+    * Regressed test cases and fixed test cases identification
+    * Dataset compatibility validation
+  - [x] **Module 6: Evaluation & Dashboard API Endpoints**:
+    * `GET /api/v1/dashboard/metrics` (Production dashboard metrics with live/mock partitioning)
+    * `POST /api/v1/evaluations/ragas/run`
+    * `POST /api/v1/evaluations/security/benchmark`
+    * `GET /api/v1/evaluations/runs`
+    * `GET /api/v1/evaluations/runs/{run_id}`
+    * `POST /api/v1/evaluations/compare`
+
+- [ ] **Phase 5: LangGraph Agent Orchestrator & Observability Suite**
+  - [ ] Unified LLM provider interface (`BaseLLMProvider`, `GroqProvider`, `OpenAIProvider`, `MockLLMProvider`)
+  - [ ] LangGraph Agent Orchestrator with StateGraph: `guard_input -> retrieve_context -> plan_tools -> authorize_tools -> execute_tools -> synthesize_response -> guard_output`
+  - [ ] OpenTelemetry & Langfuse-compatible trace schema & DB trace recording
+  - [ ] Execution trace recorder & span hierarchy in `execution_traces` and `trace_spans`
   - [ ] Structured JSON logging
 
-- [ ] **Phase 6: Continuous Evaluation & Red-Teaming Suite**
-  - [ ] RAGAS evaluation runner (Faithfulness, Relevance, Precision)
-  - [ ] Adversarial prompt injection dataset (100+ attack vectors)
-  - [ ] Automated security robustness benchmark
-  - [ ] Metric calculation endpoints
-
-- [ ] **Phase 7: Frontend Application (React + Vite + TypeScript)**
+- [ ] **Phase 6: Frontend Application (React + Vite + TypeScript)**
   - [ ] Project scaffolding with Vite, Tailwind CSS, Lucide React, Recharts
   - [ ] Verified Zero-Data Empty States (Mandatory Data Integrity Policy compliant)
   - [ ] Dashboard Overview with authentic DB metrics
@@ -99,7 +125,7 @@
   - [ ] Trace Explorer & Span timeline
   - [ ] Evaluation Benchmark results viewer
 
-- [ ] **Phase 8: Dockerization, E2E Testing & Release Packaging**
+- [ ] **Phase 7: Dockerization, E2E Testing & Release Packaging**
   - [ ] Backend Dockerfile & Frontend Dockerfile
   - [ ] `docker-compose.yml` (FastAPI + React + PostgreSQL + Qdrant)
   - [ ] End-to-end integration test execution
@@ -130,17 +156,13 @@
 Executed on November 4, 2026:
 - `backend/tests/test_foundations.py` (5 tests) **PASSED**
 - `backend/tests/test_rag_subsystem.py` (9 tests) **PASSED**
-- `backend/tests/test_security_engine.py` (12 tests) **PASSED**:
-  1. `test_normal_request_allowed` **PASSED**
-  2. `test_direct_prompt_injection_blocked` **PASSED**
-  3. `test_jailbreak_attempt_blocked` **PASSED**
-  4. `test_indirect_injection_through_retrieved_documents` **PASSED**
-  5. `test_unauthorized_tool_invocation` **PASSED**
-  6. `test_invalid_refund_amount` **PASSED**
-  7. `test_approval_bypass_attempt` **PASSED**
-  8. `test_rejected_approval` **PASSED**
-  9. `test_expired_approval` **PASSED**
-  10. `test_pii_leakage_in_output` **PASSED**
-  11. `test_policy_engine_unavailable_fail_closed` **PASSED**
-  12. `test_security_api_endpoints` **PASSED**
-- **Test Result:** 26/26 passed (100% success rate across all suites)
+- `backend/tests/test_security_engine.py` (12 tests) **PASSED**
+- `backend/tests/test_evaluation_engine.py` (7 tests) **PASSED**:
+  1. `test_percentile_latency_calculation` **PASSED**
+  2. `test_confusion_matrix_calculations_and_zero_denominators` **PASSED**
+  3. `test_known_fixture_metrics_calculation` **PASSED**
+  4. `test_fresh_install_zero_metrics` **PASSED**
+  5. `test_ragas_evaluation_engine_metrics` **PASSED**
+  6. `test_regression_comparison_engine` **PASSED**
+  7. `test_evaluations_and_dashboard_api_endpoints` **PASSED**
+- **Test Result:** 33/33 passed (100% success rate across all suites)

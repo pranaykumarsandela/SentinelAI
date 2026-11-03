@@ -79,3 +79,4 @@ class ApprovalRequestRead(BaseModel):
     reviewer_id: Optional[str] = None
     reviewer_role: Optional[str] = None
     rejection_reason: Optional[str] = None
+

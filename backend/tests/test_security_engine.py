@@ -343,3 +343,4 @@ async def test_security_api_endpoints():
                 os.remove(db_file)
             except OSError:
                 pass
+

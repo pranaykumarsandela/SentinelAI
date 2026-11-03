@@ -97,3 +97,4 @@ async def list_security_events(
             has_more=(page * page_size < total)
         )
     )
+
