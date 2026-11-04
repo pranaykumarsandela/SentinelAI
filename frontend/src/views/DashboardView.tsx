@@ -10,6 +10,8 @@ import {
   Layers,
   ArrowUpRight,
   TrendingDown,
+  Network,
+  Zap,
 } from 'lucide-react';
 import {
   BarChart,
@@ -26,7 +28,12 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { DashboardMetrics, TimeseriesPoint, ExecutionTraceItem } from '../types';
+import {
+  DashboardMetrics,
+  TimeseriesPoint,
+  ExecutionTraceItem,
+  DashboardProviderMetric,
+} from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { EmptyState } from '../components/EmptyState';
 import { api } from '../api/client';
@@ -46,18 +53,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
   const [recentTraces, setRecentTraces] = useState<ExecutionTraceItem[]>([]);
+  const [providerMetrics, setProviderMetrics] = useState<DashboardProviderMetric[]>([]);
   const [loadingExtras, setLoadingExtras] = useState(false);
 
   useEffect(() => {
     const fetchExtras = async () => {
       try {
         setLoadingExtras(true);
-        const [tsData, tracesData] = await Promise.all([
+        const [tsData, tracesData, provData] = await Promise.all([
           api.getDashboardTimeseries('all', 1).catch(() => []),
           api.getTraces(undefined, undefined, undefined, 6).catch(() => []),
+          api.getDashboardProviders().catch(() => ({ is_fresh_zero_state: true, providers: [] })),
         ]);
         setTimeseries(tsData || []);
         setRecentTraces(tracesData || []);
+        setProviderMetrics(provData?.providers || []);
       } finally {
         setLoadingExtras(false);
       }
@@ -233,8 +243,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
                     labelStyle={{ color: '#f3f4f6' }}
                   />
-                  <Area type="monotone" dataKey="request_count" stroke="#3B82F6" fillOpacity={1} fill="url(#colorRequests)" name="Total Requests" />
-                  <Area type="monotone" dataKey="blocked_count" stroke="#EF4444" fillOpacity={1} fill="url(#colorBlocked)" name="Blocked Requests" />
+                  <Area
+                    type="monotone"
+                    dataKey="request_count"
+                    stroke="#3B82F6"
+                    fillOpacity={1}
+                    fill="url(#colorRequests)"
+                    name="Total Requests"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="blocked_count"
+                    stroke="#EF4444"
+                    fillOpacity={1}
+                    fill="url(#colorBlocked)"
+                    name="Blocked Requests"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
@@ -284,6 +308,75 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* MULTI-LLM PROVIDER TELEMETRY & DISTRIBUTION */}
+      {/* ============================================================== */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Network className="w-4 h-4 text-purple-400" />
+              Multi-LLM Gateway Telemetry & Token Accounting
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Live database aggregation across Google Gemini, Groq, OpenAI, and Mock providers.
+            </p>
+          </div>
+          <span className="text-[10px] font-mono text-gray-400">
+            Source: <strong className="text-gray-300">llm_invocations & llm_fallback_events</strong>
+          </span>
+        </div>
+
+        {providerMetrics.length === 0 ? (
+          <div className="p-6 text-center text-xs text-gray-500">
+            No provider invocations recorded yet. Invocations from LangGraph orchestration will populate this distribution.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {providerMetrics.map((p) => (
+              <div
+                key={p.provider}
+                className="bg-gray-950 border border-gray-800 rounded-lg p-3.5 space-y-2 font-mono text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white uppercase text-xs">{p.provider}</span>
+                  {p.fallbacks > 0 ? (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      {p.fallbacks} Fallbacks
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/15 text-emerald-400">
+                      Stable
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-[11px] pt-1 border-t border-gray-800/80">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Requests:</span>
+                    <strong className="text-white">{p.requests}</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Total Tokens:</span>
+                    <strong className="text-purple-400">{p.total_tokens.toLocaleString()}</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Avg Latency:</span>
+                    <strong className="text-amber-400">{p.avg_latency_ms} ms</strong>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Errors:</span>
+                    <strong className={p.errors > 0 ? 'text-rose-400' : 'text-gray-500'}>
+                      {p.errors}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Latency Percentiles Bar Chart */}
@@ -348,31 +441,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           className="hover:text-blue-400 underline underline-offset-2 flex items-center gap-1"
                         >
                           {tr.id.slice(0, 8)}...
-                          <ArrowUpRight className="w-3 h-3" />
+                          <ArrowUpRight className="w-3 h-3 opacity-60" />
                         </button>
                       ) : (
                         `${tr.id.slice(0, 8)}...`
                       )}
                     </td>
-                    <td className="py-2 px-3 font-medium text-gray-200">{tr.agent_id}</td>
+                    <td className="py-2 px-3 text-gray-300 font-mono">{tr.agent_id}</td>
                     <td className="py-2 px-3">
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                           tr.status === 'SUCCESS'
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
                             : tr.status === 'BLOCKED'
-                            ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                            : tr.status === 'PENDING_APPROVAL'
-                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                            : 'bg-gray-500/15 text-gray-400 border border-gray-500/30'
+                            ? 'bg-rose-950/60 text-rose-300 border-rose-800'
+                            : 'bg-amber-950/60 text-amber-300 border-amber-800'
                         }`}
                       >
                         {tr.status}
                       </span>
                     </td>
-                    <td className="py-2 px-3 font-mono text-gray-300">{tr.total_tokens.toLocaleString()}</td>
-                    <td className="py-2 px-3 font-mono text-gray-400">{tr.total_latency_ms.toFixed(1)} ms</td>
-                    <td className="py-2 px-3 text-gray-400 font-mono text-[11px]">
+                    <td className="py-2 px-3 text-gray-400 font-mono">{tr.total_tokens}</td>
+                    <td className="py-2 px-3 text-gray-400 font-mono">{tr.total_latency_ms} ms</td>
+                    <td className="py-2 px-3 text-gray-500 font-mono">
                       {new Date(tr.started_at).toLocaleTimeString()}
                     </td>
                   </tr>

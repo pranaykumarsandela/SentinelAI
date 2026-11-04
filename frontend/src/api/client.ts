@@ -14,6 +14,11 @@ import {
   AuditLogEntry,
   SystemSettingsItem,
   RAGQueryResponse,
+  ProviderStatusItem,
+  ProviderHealthCheckItem,
+  ModelRouterConfig,
+  DashboardProviderMetric,
+  LLMBenchmarkRunDetails,
 } from '../types';
 
 const BASE_URL = '/api/v1';
@@ -249,6 +254,50 @@ export const api = {
   getSettings: () => fetchJson<SystemSettingsItem>(`${BASE_URL}/settings`),
   updateSettings: (payload: Partial<SystemSettingsItem>) =>
     fetchJson<SystemSettingsItem>(`${BASE_URL}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+
+  // 13. Multi-LLM Providers, Routing & Observability
+  getProviders: () => fetchJson<ProviderStatusItem[]>(`${BASE_URL}/providers`),
+  getProvidersHealth: () => fetchJson<ProviderHealthCheckItem[]>(`${BASE_URL}/providers/health`),
+  checkProviderHealth: (provider: string) =>
+    fetchJson<ProviderHealthCheckItem>(`${BASE_URL}/providers/health-check?provider=${encodeURIComponent(provider)}`, {
+      method: 'POST',
+    }),
+  getProviderModels: () =>
+    fetchJson<{ models: Record<string, string[]>; pricing_catalog_version: string }>(`${BASE_URL}/providers/models`),
+  getProviderConfiguration: () => fetchJson<ModelRouterConfig>(`${BASE_URL}/providers/configuration`),
+  updateProviderConfiguration: (payload: Partial<ModelRouterConfig>) =>
+    fetchJson<ModelRouterConfig>(`${BASE_URL}/providers/configuration`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  getDashboardProviders: () =>
+    fetchJson<{ is_fresh_zero_state: boolean; providers: DashboardProviderMetric[] }>(`${BASE_URL}/dashboard/providers`),
+  getLLMInvocations: (params?: { provider?: string; trace_id?: string; status?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.provider) q.append('provider', params.provider);
+    if (params?.trace_id) q.append('trace_id', params.trace_id);
+    if (params?.status) q.append('status', params.status);
+    if (params?.limit !== undefined) q.append('limit', String(params.limit));
+    if (params?.offset !== undefined) q.append('offset', String(params.offset));
+    return fetchJson<any[]>(`${BASE_URL}/llm/invocations?${q.toString()}`);
+  },
+  getLLMUsage: () => fetchJson<{ by_provider: Record<string, any> }>(`${BASE_URL}/llm/usage`),
+  getLLMMetrics: () => fetchJson<{ provider_metrics: Record<string, any> }>(`${BASE_URL}/llm/metrics`),
+  getLLMBenchmarks: (limit = 20) => fetchJson<any[]>(`${BASE_URL}/llm/benchmarks?limit=${limit}`),
+  getLLMBenchmarkDetails: (runId: string) => fetchJson<LLMBenchmarkRunDetails>(`${BASE_URL}/llm/benchmarks/${runId}`),
+  runLLMBenchmark: (payload: {
+    providers: Array<{ provider: string; model: string }>;
+    dataset_name?: string;
+    dataset_version?: string;
+    prompt_version?: string;
+    is_mock?: boolean;
+  }) =>
+    fetchJson<LLMBenchmarkRunDetails>(`${BASE_URL}/llm/benchmarks/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

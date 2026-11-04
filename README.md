@@ -1,10 +1,11 @@
 # SentinelAI – Enterprise Agent Security & Evaluation Platform
 
-[![Build Status](https://img.shields.io/badge/tests-39%20passed-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-49%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)]()
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)]()
+[![Multi-LLM](https://img.shields.io/badge/Multi--LLM-Gemini%20%7C%20Groq%20%7C%20OpenAI%20%7C%20Mock-purple.svg)]()
 [![Data Integrity](https://img.shields.io/badge/Data%20Integrity-100%25%20Authentic-emerald.svg)]()
 
 SentinelAI is an enterprise-grade AI agent firewall, orchestration runtime, and continuous evaluation platform. It provides deterministic and model-assisted defense against prompt injection, jailbreaks, indirect document injection, and unauthorized tool calls, while orchestrating agents with LangGraph and monitoring performance with rigorous, zero-fake data integrity.
@@ -98,9 +99,16 @@ SentinelAI adheres strictly to the **Mandatory Data Integrity Policy**:
 - **Security Benchmark**: Measures True Positives, False Positives, True Negatives, False Negatives, Precision, Recall, F1, and False Positive Rate across 6 attack categories.
 - **Regression Detection**: Compares baseline vs. candidate evaluation runs, tracking metric deltas, newly regressed test cases, and candidate model drift.
 
-### 5. Full-Stack Observability & UI
-- **React 18 + TypeScript SPA**: Enterprise dashboard with live metric cards, Recharts time-series charts, approval review drawers, interactive agent playground, knowledge base manager, security incident audit log, and trace timeline viewer.
-- **Distributed Database Tracing**: Every agent transaction generates an `ExecutionTrace` with step-by-step `TraceSpan` timings, token accounting, and Langfuse-compatible JSON logging.
+### 5. Multi-LLM Gateway, Task Routing & Automated Failover
+- **Unified Provider Abstraction**: Integrated official SDKs for **Google Gemini** (`google-genai`), **Groq** (`groq`), **OpenAI** (`openai`), and **Deterministic Mock Engine** (`mock-sentinel-v1`).
+- **Normalized Response & Zero Token Fabrication**: Returns authentic token consumption (`input_tokens`, `output_tokens`, `total_tokens`), measured latency, provider request IDs, and finish reasons directly from upstream headers.
+- **Dynamic Task-Based Routing**: Configurable model routing for specialized agent workloads (`planning`, `fast_classification`, `document_answering`, `evaluation`, `structured_output`).
+- **Intelligent Fallback Chains**: Automatic failover upon rate-limits (`429`), timeouts, model deprecations, and connection drops with database-backed `LLMFallbackEvent` records.
+- **Multi-LLM Benchmark Comparison**: Executes identical test suites concurrently across providers, rendering comparative scorecards with real faithfulness, relevancy, latency, and costs via `PRICING_CATALOG_V1`.
+
+### 6. Full-Stack Observability & UI
+- **React 18 + TypeScript SPA**: Enterprise dashboard with live metric cards, Recharts time-series charts, approval review drawers, interactive agent playground, knowledge base manager, security incident audit log, Multi-LLM provider telemetry, and trace timeline viewer.
+- **Distributed Database Tracing**: Every agent transaction generates an `ExecutionTrace` with step-by-step `TraceSpan` timings, token accounting, exact provider and model metadata, fallback indicators, and Langfuse-compatible JSON logging.
 
 ---
 

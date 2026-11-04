@@ -193,6 +193,8 @@ class ExecutionTrace(Base):
     spans: Mapped[List["TraceSpan"]] = relationship("TraceSpan", back_populates="trace", cascade="all, delete-orphan")
     security_events: Mapped[List["SecurityEvent"]] = relationship("SecurityEvent", back_populates="trace", cascade="all, delete-orphan")
     approval_requests: Mapped[List["ApprovalRequest"]] = relationship("ApprovalRequest", back_populates="trace", cascade="all, delete-orphan")
+    invocations: Mapped[List["LLMInvocation"]] = relationship("LLMInvocation", back_populates="trace", cascade="all, delete-orphan")
+    fallback_events: Mapped[List["LLMFallbackEvent"]] = relationship("LLMFallbackEvent", back_populates="trace", cascade="all, delete-orphan")
 
 
 class TraceSpan(Base):
@@ -380,3 +382,160 @@ class RetrievalEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="retrieval_events")
+
+
+# --- Multi-LLM Provider & Evaluation Models ---
+
+class LLMProviderEntity(Base):
+    __tablename__ = "llm_providers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)  # gemini, groq, openai, mock
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_connected: Mapped[bool] = mapped_column(Boolean, default=False)
+    health_status: Mapped[str] = mapped_column(String(30), default="NOT_CONFIGURED")  # HEALTHY, DEGRADED, UNREACHABLE, NOT_CONFIGURED
+    latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    last_health_check: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    models: Mapped[List["LLMModelConfig"]] = relationship("LLMModelConfig", back_populates="provider", cascade="all, delete-orphan")
+    invocations: Mapped[List["LLMInvocation"]] = relationship("LLMInvocation", back_populates="provider_rel")
+
+
+class LLMModelConfig(Base):
+    __tablename__ = "llm_model_configs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    provider_id: Mapped[str] = mapped_column(String(36), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    context_window: Mapped[int] = mapped_column(Integer, default=128000)
+    supports_streaming: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_tool_calling: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_structured_output: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_json_mode: Mapped[bool] = mapped_column(Boolean, default=True)
+    input_cost_per_million: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    output_cost_per_million: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    provider: Mapped["LLMProviderEntity"] = relationship("LLMProviderEntity", back_populates="models")
+
+
+class LLMInvocation(Base):
+    __tablename__ = "llm_invocations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=True, index=True)
+    span_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    agent_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    user_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    
+    provider: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    provider_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True)
+    model: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    task_type: Mapped[str] = mapped_column(String(50), default="general")  # planning, answering, classification, evaluation, benchmark
+    
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    provider_request_id: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
+    finish_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="SUCCESS")  # SUCCESS, ERROR, FALLBACK_TRIGGERED
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # AUTH, RATE_LIMIT, TIMEOUT, MODEL_ERROR, NETWORK
+    
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    fallback_occurred: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    trace: Mapped[Optional["ExecutionTrace"]] = relationship("ExecutionTrace", back_populates="invocations")
+    provider_rel: Mapped[Optional["LLMProviderEntity"]] = relationship("LLMProviderEntity", back_populates="invocations")
+    fallback_event: Mapped[Optional["LLMFallbackEvent"]] = relationship("LLMFallbackEvent", back_populates="invocation", uselist=False)
+
+
+class LLMFallbackEvent(Base):
+    __tablename__ = "llm_fallback_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("execution_traces.id", ondelete="CASCADE"), nullable=True, index=True)
+    invocation_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("llm_invocations.id", ondelete="SET NULL"), nullable=True)
+    
+    primary_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    primary_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    fallback_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    fallback_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    fallback_reason: Mapped[str] = mapped_column(String(100), nullable=False)
+    original_error: Mapped[str] = mapped_column(Text, nullable=False)
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    execution_result: Mapped[str] = mapped_column(String(30), default="SUCCESS")  # SUCCESS, FAILED
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    trace: Mapped[Optional["ExecutionTrace"]] = relationship("ExecutionTrace", back_populates="fallback_events")
+    invocation: Mapped[Optional["LLMInvocation"]] = relationship("LLMInvocation", back_populates="fallback_event")
+
+
+class LLMBenchmarkRun(Base):
+    __tablename__ = "llm_benchmark_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    dataset_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String(30), default="v1.0")
+    prompt_version: Mapped[str] = mapped_column(String(30), default="v1.0")
+    selected_providers: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    total_samples: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="RUNNING")  # RUNNING, COMPLETED, FAILED
+    
+    pricing_source: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    pricing_version: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    results: Mapped[List["LLMBenchmarkResult"]] = relationship("LLMBenchmarkResult", back_populates="benchmark_run", cascade="all, delete-orphan")
+
+
+class LLMBenchmarkResult(Base):
+    __tablename__ = "llm_benchmark_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid_str)
+    benchmark_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("llm_benchmark_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    total_requests: Mapped[int] = mapped_column(Integer, default=0)
+    successful_requests: Mapped[int] = mapped_column(Integer, default=0)
+    failed_requests: Mapped[int] = mapped_column(Integer, default=0)
+    
+    avg_latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    p50_latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    p95_latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    total_prompt_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_completion_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    faithfulness_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    relevancy_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    security_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    
+    total_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pricing_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    raw_metrics: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    benchmark_run: Mapped["LLMBenchmarkRun"] = relationship("LLMBenchmarkRun", back_populates="results")
+

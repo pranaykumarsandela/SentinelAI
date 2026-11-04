@@ -184,3 +184,28 @@ Allowed / Not Blocked    FN                   TN
 - **Denominator:** Total propositions in ground-truth answer.
 - **Empty-Data Behavior:** Returns `null` if ground truth is not provided.
 
+---
+
+## 4. Multi-LLM Comparative Benchmark & Cost Accounting
+
+### 4.1 Verified Cost Calculation (PRICING_CATALOG_V1)
+- **Definition:** The monetary cost in USD of an LLM invocation or benchmark run, calculated strictly from provider input/output token counts and the official versioned pricing catalog.
+- **Formula:**
+  $$\text{Cost}_{\text{USD}} = \left( \frac{\text{Tokens}_{\text{input}} \times \text{Price}_{\text{input\_per\_M}}}{1{,}000{,}000} \right) + \left( \frac{\text{Tokens}_{\text{output}} \times \text{Price}_{\text{output\_per\_M}}}{1{,}000{,}000} \right)$$
+- **Pricing Catalog (V1.0):**
+  - `gemini-2.5-flash`: \$0.075 / 1M input, \$0.30 / 1M output
+  - `gemini-2.5-pro`: \$1.25 / 1M input, \$5.00 / 1M output
+  - `llama-3.3-70b-versatile`: \$0.59 / 1M input, \$0.79 / 1M output
+  - `gpt-4o-mini`: \$0.15 / 1M input, \$0.60 / 1M output
+  - `gpt-4o`: \$2.50 / 1M input, \$10.00 / 1M output
+  - `mock-sentinel-v1`: \$0.00 / 1M input, \$0.00 / 1M output
+- **Data Integrity Rule:** If token counts are missing or null, cost is reported as `null` or `0.00` with pricing source metadata recorded. Zero cost fabrication is permitted.
+
+### 4.2 Provider Success & Fallback Rates
+- **Provider Success Rate:**
+  $$\text{Success Rate} = \frac{\text{Successful Invocations}}{\text{Total Invocations}}$$
+- **Fallback Rate:**
+  $$\text{Fallback Rate} = \frac{\text{Fallback Events}}{\text{Total Attempted Requests}}$$
+- **Empty-Data Behavior:** Returns `null` ("N/A") when total invocations equal zero.
+
+

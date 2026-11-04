@@ -28,7 +28,9 @@ from backend.app.security.output_guard import output_guard
 from backend.app.security.event_recorder import security_event_recorder
 from backend.app.rag.hybrid_retriever import hybrid_retriever
 from backend.app.rag.prompt_injection_guard import indirect_injection_guard
-from backend.app.services.llm_provider import get_llm_provider, BaseLLMProvider
+from backend.app.services.llm_provider import get_llm_provider, BaseLLMProvider, NormalizedLLMResponse
+from backend.app.services.llm_gateway import multi_llm_gateway
+from backend.app.services.model_router import model_router
 from backend.app.observability.logger import sentinel_logger
 
 
@@ -49,7 +51,10 @@ class OrchestratorState(TypedDict):
     system_prompt: Optional[str]
     use_rag: bool
     is_mock: bool
+    preferred_provider: Optional[str]
     model_name: Optional[str]
+    provider_used: Optional[str]
+    fallback_occurred: bool
     simulate_tool_call: Optional[str]
 
     step_count: int
@@ -253,14 +258,9 @@ def node_retrieve_context(state: OrchestratorState) -> Dict[str, Any]:
 
 
 async def node_llm_plan(state: OrchestratorState) -> Dict[str, Any]:
-    """Generates next agent action (response or tool invocation plan) via LLM Provider."""
+    """Generates next agent action (response or tool invocation plan) via Multi-LLM Gateway."""
     start_t = time.perf_counter()
     spans = list(state.get("spans", []))
-
-    provider = get_llm_provider(
-        model_name=state.get("model_name"),
-        is_mock=state.get("is_mock", True),
-    )
 
     prompt = state.get("sanitized_input") or state["input_prompt"]
     system_prompt = state.get("system_prompt") or "You are SentinelAI Enterprise Agent. Answer faithfully and safely."
@@ -273,26 +273,36 @@ async def node_llm_plan(state: OrchestratorState) -> Dict[str, Any]:
 
     available_tools = tool_registry.list_tools()
     
-    llm_resp = await provider.generate(
+    llm_resp = await multi_llm_gateway.execute(
         prompt=prompt,
         system_prompt=system_prompt,
         tools=available_tools,
+        task_type="planning",
+        preferred_provider=state.get("preferred_provider"),
+        preferred_model=state.get("model_name"),
         simulate_tool_call=state.get("simulate_tool_call"),
+        trace_id=state.get("trace_id"),
+        request_id=state.get("request_id"),
+        agent_id=state.get("agent_id"),
+        user_id=state.get("user_id"),
+        is_mock=state.get("is_mock", True),
     )
 
     latency_ms = round((time.perf_counter() - start_t) * 1000, 2)
     spans.append({
         "id": str(uuid.uuid4()),
-        "name": "LLM_PLAN",
+        "name": f"LLM_PLAN_{llm_resp.provider.upper()}",
         "span_type": SpanType.LLM_CALL.value,
-        "input_data": {"prompt_chars": len(prompt)},
+        "input_data": {"prompt_chars": len(prompt), "provider": llm_resp.provider, "model": llm_resp.model},
         "output_data": {
             "has_tool_calls": len(llm_resp.tool_calls) > 0,
             "tool_calls": llm_resp.tool_calls,
             "tokens": llm_resp.total_tokens,
+            "provider": llm_resp.provider,
+            "model": llm_resp.model,
         },
         "latency_ms": latency_ms,
-        "tokens": llm_resp.total_tokens,
+        "tokens": llm_resp.total_tokens or 0,
         "status": "OK",
         "created_at": utc_now(),
     })
@@ -301,9 +311,11 @@ async def node_llm_plan(state: OrchestratorState) -> Dict[str, Any]:
         "spans": spans,
         "tool_calls": llm_resp.tool_calls,
         "raw_output": llm_resp.content,
-        "prompt_tokens": state.get("prompt_tokens", 0) + llm_resp.prompt_tokens,
-        "completion_tokens": state.get("completion_tokens", 0) + llm_resp.completion_tokens,
-        "total_tokens": state.get("total_tokens", 0) + llm_resp.total_tokens,
+        "prompt_tokens": state.get("prompt_tokens", 0) + (llm_resp.prompt_tokens or 0),
+        "completion_tokens": state.get("completion_tokens", 0) + (llm_resp.completion_tokens or 0),
+        "total_tokens": state.get("total_tokens", 0) + (llm_resp.total_tokens or 0),
+        "provider_used": llm_resp.provider,
+        "model_name": llm_resp.model,
     }
 
 
@@ -460,32 +472,35 @@ async def node_execute_tools(state: OrchestratorState) -> Dict[str, Any]:
             "created_at": utc_now(),
         })
 
-    # Call LLM to synthesize final response incorporating tool results
-    provider = get_llm_provider(
-        model_name=state.get("model_name"),
-        is_mock=state.get("is_mock", True),
-    )
-    
+    # Call LLM to synthesize final response incorporating tool results via Multi-LLM Gateway
     synth_prompt = (
         f"Original Request: {state['input_prompt']}\n\n"
         f"Tool Results:\n{tool_results}\n\n"
         "Synthesize a clear, helpful response for the user based strictly on these tool execution results."
     )
     
-    synth_resp = await provider.generate(
+    synth_resp = await multi_llm_gateway.execute(
         prompt=synth_prompt,
         system_prompt=state.get("system_prompt"),
+        task_type="document_answering",
+        preferred_provider=state.get("preferred_provider"),
+        preferred_model=state.get("model_name"),
+        trace_id=state.get("trace_id"),
+        request_id=state.get("request_id"),
+        agent_id=state.get("agent_id"),
+        user_id=state.get("user_id"),
+        is_mock=state.get("is_mock", True),
     )
 
     latency_ms = round((time.perf_counter() - start_t) * 1000, 2)
     spans.append({
         "id": str(uuid.uuid4()),
-        "name": "LLM_SYNTHESIS",
+        "name": f"LLM_SYNTHESIS_{synth_resp.provider.upper()}",
         "span_type": SpanType.LLM_CALL.value,
-        "input_data": {"tool_results_count": len(tool_results)},
-        "output_data": {"tokens": synth_resp.total_tokens},
+        "input_data": {"tool_results_count": len(tool_results), "provider": synth_resp.provider, "model": synth_resp.model},
+        "output_data": {"tokens": synth_resp.total_tokens, "provider": synth_resp.provider, "model": synth_resp.model},
         "latency_ms": latency_ms,
-        "tokens": synth_resp.total_tokens,
+        "tokens": synth_resp.total_tokens or 0,
         "status": "OK",
         "created_at": utc_now(),
     })
@@ -494,9 +509,11 @@ async def node_execute_tools(state: OrchestratorState) -> Dict[str, Any]:
         "spans": spans,
         "tool_results": tool_results,
         "raw_output": synth_resp.content,
-        "prompt_tokens": state.get("prompt_tokens", 0) + synth_resp.prompt_tokens,
-        "completion_tokens": state.get("completion_tokens", 0) + synth_resp.completion_tokens,
-        "total_tokens": state.get("total_tokens", 0) + synth_resp.total_tokens,
+        "prompt_tokens": state.get("prompt_tokens", 0) + (synth_resp.prompt_tokens or 0),
+        "completion_tokens": state.get("completion_tokens", 0) + (synth_resp.completion_tokens or 0),
+        "total_tokens": state.get("total_tokens", 0) + (synth_resp.total_tokens or 0),
+        "provider_used": synth_resp.provider,
+        "model_name": synth_resp.model,
     }
 
 
@@ -570,15 +587,19 @@ def node_guard_output(state: OrchestratorState) -> Dict[str, Any]:
 
 
 def node_finalize(state: OrchestratorState) -> Dict[str, Any]:
-    """Finalizes metrics, token counts, and cost calculation."""
-    total_tokens = state.get("total_tokens", 0)
-    # Estimated cost: $0.000002 per token standard baseline for audit tracking
-    estimated_cost = round(total_tokens * 0.000002, 6)
+    """Finalizes metrics, token counts, and cost calculation via versioned pricing catalog."""
+    model_used = state.get("model_name") or "mock-sentinel-v1"
+    in_tok = state.get("prompt_tokens")
+    out_tok = state.get("completion_tokens")
+    
+    calculated_cost = model_router.calculate_cost(model_used, in_tok, out_tok)
+    if calculated_cost is None:
+        calculated_cost = 0.0
     
     total_lat = sum(s.get("latency_ms", 0.0) for s in state.get("spans", []))
 
     return {
-        "estimated_cost_usd": estimated_cost,
+        "estimated_cost_usd": round(calculated_cost, 6),
         "total_latency_ms": round(total_lat, 2),
     }
 
@@ -633,6 +654,20 @@ class AgentOrchestrator:
         req_id = request.session_id or f"req-{uuid.uuid4().hex[:8]}"
         u_id = user_id or f"user-{tenant_id}"
 
+        agent_provider = None
+        agent_model = None
+        agent_system_prompt = system_prompt
+        try:
+            from backend.app.models.entities import Agent
+            agent_record = await db.get(Agent, request.agent_id)
+            if agent_record:
+                agent_provider = agent_record.model_provider
+                agent_model = agent_record.model_name
+                if not agent_system_prompt and agent_record.system_prompt:
+                    agent_system_prompt = agent_record.system_prompt
+        except Exception:
+            pass
+
         corpus_chunks: List[Dict[str, Any]] = []
         if use_rag:
             from sqlalchemy import select
@@ -663,10 +698,13 @@ class AgentOrchestrator:
             "user_id": u_id,
             "input_prompt": request.prompt,
             "sanitized_input": request.prompt,
-            "system_prompt": system_prompt,
+            "system_prompt": agent_system_prompt,
             "use_rag": use_rag,
             "is_mock": request.is_mock,
-            "model_name": None,
+            "preferred_provider": agent_provider,
+            "model_name": agent_model,
+            "provider_used": None,
+            "fallback_occurred": False,
             "simulate_tool_call": simulate_tool_call,
             "step_count": 0,
             "max_steps": 10,
@@ -716,6 +754,31 @@ class AgentOrchestrator:
             completed_at=utc_now(),
         )
         db.add(trace_entity)
+
+        # Persist LLMInvocation record if LLM was invoked
+        if final_state.get("total_tokens", 0) > 0 or final_state.get("provider_used"):
+            from backend.app.models.entities import LLMInvocation
+            inv_entity = LLMInvocation(
+                id=str(uuid.uuid4()),
+                trace_id=trace_id,
+                request_id=req_id,
+                agent_id=request.agent_id,
+                user_id=u_id,
+                provider=final_state.get("provider_used") or "mock",
+                model=final_state.get("model_name") or "mock-sentinel-v1",
+                task_type="agent_execution",
+                input_tokens=final_state.get("prompt_tokens", 0),
+                output_tokens=final_state.get("completion_tokens", 0),
+                total_tokens=final_state.get("total_tokens", 0),
+                latency_ms=final_state.get("total_latency_ms", 0.0),
+                status=final_state.get("status", "SUCCESS"),
+                retry_count=0,
+                fallback_occurred=final_state.get("fallback_occurred", False),
+                is_mock=request.is_mock,
+                started_at=utc_now(),
+                completed_at=utc_now(),
+            )
+            db.add(inv_entity)
 
         # Persist Spans
         for s in final_state.get("spans", []):

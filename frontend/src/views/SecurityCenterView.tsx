@@ -436,3 +436,4 @@ export const SecurityCenterView: React.FC = () => {
     </div>
   );
 };
+

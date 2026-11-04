@@ -306,3 +306,4 @@ export const AuditLogsView: React.FC = () => {
     </div>
   );
 };
+

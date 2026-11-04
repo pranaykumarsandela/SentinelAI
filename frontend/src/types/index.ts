@@ -97,6 +97,9 @@ export interface ExecutionTraceItem {
   completion_tokens: number;
   total_latency_ms: number;
   estimated_cost_usd: number;
+  provider?: string | null;
+  model_name?: string | null;
+  fallback_occurred?: boolean;
   started_at: string;
   completed_at: string | null;
   spans?: TraceSpanItem[];
@@ -294,6 +297,7 @@ export interface SystemSettingsItem {
   database_dialect: string;
   default_llm_provider: string;
   default_llm_model: string;
+  gemini_configured?: boolean;
   groq_configured: boolean;
   openai_configured: boolean;
   langfuse_configured: boolean;
@@ -304,4 +308,78 @@ export interface SystemSettingsItem {
   fail_closed_mode: boolean;
   max_input_length: number;
   prompt_injection_threshold: number;
+}
+
+export interface ProviderStatusItem {
+  provider: string;
+  display_name: string;
+  is_configured: boolean;
+  configured_model: string;
+  supports_tools: boolean;
+  supports_structured: boolean;
+  supports_streaming: boolean;
+}
+
+export interface ProviderHealthCheckItem {
+  provider: string;
+  model: string;
+  connected: boolean;
+  status: 'HEALTHY' | 'UNREACHABLE' | 'NOT_CONFIGURED';
+  latency_ms: number | null;
+  message: string;
+  timestamp: number;
+}
+
+export interface TaskRouteItem {
+  provider: string;
+  model: string;
+}
+
+export interface ModelRouterConfig {
+  default_provider: string;
+  default_model: string;
+  task_routing: Record<string, TaskRouteItem>;
+  fallback_chains: Record<string, TaskRouteItem[]>;
+}
+
+export interface DashboardProviderMetric {
+  provider: string;
+  requests: number;
+  total_tokens: number;
+  avg_latency_ms: number;
+  errors: number;
+  fallbacks: number;
+}
+
+export interface LLMBenchmarkResultItem {
+  provider: string;
+  model: string;
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  success_rate: number;
+  avg_latency_ms: number | null;
+  p50_latency_ms: number | null;
+  p95_latency_ms: number | null;
+  total_prompt_tokens: number | null;
+  total_completion_tokens: number | null;
+  total_tokens: number | null;
+  faithfulness_score: number | null;
+  relevancy_score: number | null;
+  total_cost_usd: number | null;
+  pricing_data: Record<string, any> | null;
+}
+
+export interface LLMBenchmarkRunDetails {
+  id: string;
+  dataset_name: string;
+  dataset_version: string;
+  prompt_version: string;
+  total_samples: number;
+  status: string;
+  pricing_source: string | null;
+  pricing_version: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  results: LLMBenchmarkResultItem[];
 }

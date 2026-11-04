@@ -149,6 +149,9 @@ class ExecutionTraceRead(BaseModel):
     completion_tokens: int
     total_latency_ms: float
     estimated_cost_usd: float
+    provider: Optional[str] = None
+    model_name: Optional[str] = None
+    fallback_occurred: Optional[bool] = False
     started_at: datetime
     completed_at: Optional[datetime] = None
     spans: List[TraceSpanRead] = []

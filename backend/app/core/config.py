@@ -25,16 +25,26 @@ class Settings(BaseSettings):
     # Database
     # Default to async SQLite for local execution; can be switched to PostgreSQL
     DATABASE_URL: str = "sqlite+aiosqlite:///./sentinelai.db"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    JWT_SECRET_KEY: str = "sentinelai-secret-key-change-in-production"
     
     # LLM Settings
-    DEFAULT_LLM_PROVIDER: str = "mock"  # "mock", "groq", "openai"
+    DEFAULT_LLM_PROVIDER: str = "mock"  # "mock", "gemini", "groq", "openai"
     DEFAULT_LLM_MODEL: str = "mock-sentinel-v1"
+    
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    
     GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    
     OPENAI_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
     
     # Qdrant
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
+    QDRANT_URL: str = "http://localhost:6333"
     QDRANT_IN_MEMORY: bool = True
     
     # Observability

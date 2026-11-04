@@ -422,3 +422,4 @@ export const RedTeamLabView: React.FC = () => {
     </div>
   );
 };
+

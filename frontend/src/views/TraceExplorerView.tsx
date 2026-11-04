@@ -9,6 +9,8 @@ import {
   ExternalLink,
   RefreshCw,
   AlertCircle,
+  Network,
+  Zap,
 } from 'lucide-react';
 import { ExecutionTraceItem } from '../types';
 import { api } from '../api/client';
@@ -81,7 +83,8 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
   const filteredTraces = traces.filter(
     (t) =>
       t.id.toLowerCase().includes(search.toLowerCase()) ||
-      t.input_prompt.toLowerCase().includes(search.toLowerCase())
+      t.input_prompt.toLowerCase().includes(search.toLowerCase()) ||
+      (t.provider && t.provider.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -90,7 +93,7 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <Activity className="w-5 h-5 text-blue-400" />
-            Execution Trace & Span Explorer
+            Execution Trace & Multi-LLM Span Explorer
           </h1>
           <p className="text-sm text-gray-400">
             OpenTelemetry & Langfuse-compatible span telemetry directly from persisted database records.
@@ -120,7 +123,7 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
               <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Search prompt or trace ID..."
+                placeholder="Search prompt, trace ID, provider..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -142,23 +145,30 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="font-mono text-[10px] text-gray-500">{t.id.slice(0, 8)}...</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
-                          t.status === 'SUCCESS'
-                            ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
-                            : t.status === 'BLOCKED'
-                            ? 'bg-rose-950/60 text-rose-300 border-rose-800'
-                            : 'bg-amber-950/60 text-amber-300 border-amber-800'
-                        }`}
-                      >
-                        {t.status}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {t.provider && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-950/60 text-purple-300 border border-purple-800 uppercase">
+                            {t.provider}
+                          </span>
+                        )}
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                            t.status === 'SUCCESS'
+                              ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
+                              : t.status === 'BLOCKED'
+                              ? 'bg-rose-950/60 text-rose-300 border-rose-800'
+                              : 'bg-amber-950/60 text-amber-300 border-amber-800'
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </div>
                     </div>
                     <p className="line-clamp-2 text-gray-300 font-sans">{t.input_prompt}</p>
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500">
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-800/60 text-[10px] text-gray-500 font-mono">
                       <span>{t.total_latency_ms} ms</span>
                       <span>{t.total_tokens} tokens</span>
-                      <span>{t.is_mock ? 'MOCK' : 'LIVE'}</span>
+                      <span>{t.fallback_occurred ? 'FALLBACK' : t.is_mock ? 'MOCK' : 'LIVE'}</span>
                     </div>
                   </div>
                 );
@@ -172,7 +182,20 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
                   <div>
-                    <h3 className="text-base font-semibold text-white">Trace Details</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-semibold text-white">Trace Details</h3>
+                      {selectedTrace.provider && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 uppercase">
+                          {selectedTrace.provider}
+                        </span>
+                      )}
+                      {selectedTrace.fallback_occurred && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                          <Zap className="w-3 h-3" />
+                          FALLBACK ENGAGED
+                        </span>
+                      )}
+                    </div>
                     <span className="font-mono text-xs text-gray-400">{selectedTrace.id}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -187,8 +210,25 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
                   </div>
                 </div>
 
+                {/* Fallback event banner if engaged */}
+                {selectedTrace.fallback_occurred && (
+                  <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-lg text-amber-300 text-xs flex items-center gap-2">
+                    <Zap className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>
+                      Automatic provider failover was executed for this request. Primary provider was unavailable or rate-limited; execution succeeded via fallback model.
+                    </span>
+                  </div>
+                )}
+
                 {/* Quick Info Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                  <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+                    <span className="text-gray-500 block text-[10px]">PROVIDER & MODEL</span>
+                    <strong className="text-white text-xs font-mono truncate block">
+                      {selectedTrace.provider || (selectedTrace.is_mock ? 'MOCK' : 'DEFAULT')} /{' '}
+                      {selectedTrace.model_name || 'N/A'}
+                    </strong>
+                  </div>
                   <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
                     <span className="text-gray-500 block text-[10px]">TOTAL LATENCY</span>
                     <strong className="text-white text-sm">{selectedTrace.total_latency_ms} ms</strong>
@@ -203,7 +243,7 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
                   </div>
                   <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
                     <span className="text-gray-500 block text-[10px]">TIMESTAMP</span>
-                    <strong className="text-white text-xs">
+                    <strong className="text-white text-xs font-mono">
                       {new Date(selectedTrace.started_at).toLocaleTimeString()}
                     </strong>
                   </div>
@@ -276,4 +316,3 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
     </div>
   );
 };
-
