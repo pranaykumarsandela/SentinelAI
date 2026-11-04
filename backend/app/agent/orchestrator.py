@@ -55,6 +55,7 @@ class OrchestratorState(TypedDict):
     step_count: int
     max_steps: int
 
+    corpus_chunks: List[Dict[str, Any]]
     retrieved_chunks: List[Dict[str, Any]]
     citations: List[Dict[str, Any]]
 
@@ -173,10 +174,11 @@ def node_retrieve_context(state: OrchestratorState) -> Dict[str, Any]:
     retrieved_chunks: List[Dict[str, Any]] = []
     citations: List[Dict[str, Any]] = []
 
-    if state.get("use_rag"):
+    if state.get("use_rag") and state.get("corpus_chunks"):
         query = state.get("sanitized_input") or state["input_prompt"]
-        results = hybrid_retriever.search(
+        results = hybrid_retriever.retrieve(
             query=query,
+            corpus_chunks=state.get("corpus_chunks", []),
             tenant_id=state.get("tenant_id", "default_tenant"),
             top_k=3,
         )
@@ -184,44 +186,44 @@ def node_retrieve_context(state: OrchestratorState) -> Dict[str, Any]:
         for res in results:
             text = res.get("content", "")
             # Apply Indirect Prompt Injection Guard
-            sanitized_text, is_suspicious, inj_events = indirect_injection_guard.guard_untrusted_context(
-                text=text,
-                source_identifier=res.get("filename", "unknown_doc"),
-            )
+            inj_res = indirect_injection_guard.inspect_chunk(text)
+            sanitized_text = inj_res.sanitized_text
             
-            if is_suspicious:
-                for ev in inj_events:
-                    violations.append({
-                        "event_type": SecurityEventType.INDIRECT_INJECTION.value,
+            if inj_res.is_suspicious:
+                for pat in inj_res.matched_patterns:
+                    violation_entry = {
+                        "event_type": SecurityEventType.INDIRECT_PROMPT_INJECTION.value,
                         "severity": SecuritySeverity.HIGH.value,
-                        "confidence_score": ev.get("confidence", 0.9),
+                        "confidence_score": inj_res.score,
                         "detector_name": "IndirectPromptInjectionGuard",
                         "action_taken": "FLAG",
-                        "details": ev,
-                    })
+                        "details": {"pattern": pat, "document": res.get("filename")},
+                    }
+                    violations.append(violation_entry)
                     sec_events.append({
                         "trace_id": state["trace_id"],
                         "request_id": state["request_id"],
                         "agent_id": state["agent_id"],
-                        "event_type": SecurityEventType.INDIRECT_INJECTION.value,
-                        "severity": SecuritySeverity.HIGH.value,
-                        "confidence_score": ev.get("confidence", 0.9),
-                        "detector_name": "IndirectPromptInjectionGuard",
+                        "event_type": violation_entry["event_type"],
+                        "severity": violation_entry["severity"],
+                        "confidence_score": violation_entry["confidence_score"],
+                        "detector_name": violation_entry["detector_name"],
                         "action": "FLAG",
-                        "details": ev,
+                        "details": violation_entry["details"],
                     })
 
+            c_id = res.get("chunk_id") or res.get("id") or "chunk_1"
             chunk_info = {
-                "chunk_id": res.get("id"),
+                "chunk_id": c_id,
                 "document_id": res.get("document_id"),
                 "filename": res.get("filename", "Document"),
                 "page_number": res.get("page_number"),
                 "content": sanitized_text,
-                "score": res.get("score", 0.0),
+                "score": res.get("relevance_score", 0.0),
             }
             retrieved_chunks.append(chunk_info)
             citations.append({
-                "chunk_id": res.get("id"),
+                "chunk_id": c_id,
                 "document_id": res.get("document_id"),
                 "filename": res.get("filename", "Document"),
                 "page_number": res.get("page_number"),
@@ -631,6 +633,26 @@ class AgentOrchestrator:
         req_id = request.session_id or f"req-{uuid.uuid4().hex[:8]}"
         u_id = user_id or f"user-{tenant_id}"
 
+        corpus_chunks: List[Dict[str, Any]] = []
+        if use_rag:
+            from sqlalchemy import select
+            from backend.app.models.entities import Document, DocumentChunk, IngestionStatus
+            stmt = (
+                select(DocumentChunk, Document.filename)
+                .join(Document, DocumentChunk.document_id == Document.id)
+                .where(Document.tenant_id == tenant_id, Document.status == IngestionStatus.COMPLETED.value)
+            )
+            res = await db.execute(stmt)
+            for chunk, filename in res.all():
+                corpus_chunks.append({
+                    "chunk_id": chunk.id,
+                    "document_id": chunk.document_id,
+                    "filename": filename,
+                    "content": chunk.content,
+                    "page_number": chunk.page_number,
+                    "chunk_index": chunk.chunk_index,
+                })
+
         initial_state: OrchestratorState = {
             "request_id": req_id,
             "trace_id": trace_id,
@@ -648,6 +670,7 @@ class AgentOrchestrator:
             "simulate_tool_call": simulate_tool_call,
             "step_count": 0,
             "max_steps": 10,
+            "corpus_chunks": corpus_chunks,
             "retrieved_chunks": [],
             "citations": [],
             "tool_calls": [],

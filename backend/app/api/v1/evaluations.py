@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db
@@ -44,6 +45,36 @@ async def run_evaluation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Evaluation benchmark failed: {str(e)}"
         )
+
+
+@evaluations_router.post("/ragas/run", response_model=APIResponse[EvaluationRunRead], status_code=status.HTTP_201_CREATED)
+async def run_ragas_evaluation(
+    dataset_version: str = Query("v1.0"),
+    is_mock: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    """Convenience endpoint to trigger automated RAGAS evaluation benchmark."""
+    req = EvaluationRunRequest(
+        run_type="RAG",
+        dataset_name=f"Standard-RAGAS-{dataset_version}",
+        is_mock=is_mock,
+    )
+    return await run_evaluation(payload=req, db=db)
+
+
+@evaluations_router.post("/security/benchmark", response_model=APIResponse[EvaluationRunRead], status_code=status.HTTP_201_CREATED)
+async def run_security_benchmark(
+    dataset_version: str = Query("v1.0"),
+    is_mock: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    """Convenience endpoint to trigger automated Adversarial Security robustness benchmark."""
+    req = EvaluationRunRequest(
+        run_type="SECURITY",
+        dataset_name=f"Standard-Security-{dataset_version}",
+        is_mock=is_mock,
+    )
+    return await run_evaluation(payload=req, db=db)
 
 
 @evaluations_router.get("/runs", response_model=APIResponse[PaginatedResponse[EvaluationRunRead]])
@@ -116,6 +147,24 @@ async def compare_evaluation_runs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regression comparison failed: {str(e)}"
         )
+
+
+class CompareRunsPayload(BaseModel):
+    baseline_run_id: str
+    candidate_run_id: str
+
+
+@evaluations_router.post("/compare", response_model=APIResponse[RegressionComparisonReport])
+async def compare_evaluation_runs_post(
+    payload: CompareRunsPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """POST endpoint for comparing two evaluation runs with request body."""
+    return await compare_evaluation_runs(
+        baseline_run_id=payload.baseline_run_id,
+        candidate_run_id=payload.candidate_run_id,
+        db=db,
+    )
 
 
 @evaluations_router.get("/metrics", response_model=APIResponse[dict])

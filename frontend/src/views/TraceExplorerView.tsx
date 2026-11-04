@@ -275,3 +275,4 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
     </div>
   );
 };
+

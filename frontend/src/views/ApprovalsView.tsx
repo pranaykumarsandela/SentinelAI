@@ -193,3 +193,4 @@ export const ApprovalsView: React.FC = () => {
     </div>
   );
 };
+

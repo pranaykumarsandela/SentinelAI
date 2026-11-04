@@ -72,6 +72,7 @@ async def list_security_events(
     offset = (page - 1) * page_size
     query = select(SecurityEvent)
 
+
     if event_type:
         query = query.where(SecurityEvent.event_type == event_type)
     if severity:

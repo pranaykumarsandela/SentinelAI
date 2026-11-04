@@ -62,3 +62,25 @@ async def get_dashboard_timeseries(
         data=points
     )
 
+
+@dashboard_router.get("/metrics", response_model=DashboardOverviewMetrics)
+async def get_dashboard_metrics(
+    environment: str = Query("all", pattern="^(live|mock|all)$"),
+    is_mock: Optional[bool] = Query(None),
+    tenant_id: Optional[str] = Query(None),
+    hours: Optional[int] = Query(None, ge=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Direct metrics endpoint for platform dashboard & telemetry."""
+    env = environment
+    if is_mock is not None:
+        env = "mock" if is_mock else "live"
+    metrics = await metrics_calculator.calculate_overview(
+        session=db,
+        environment=env,
+        tenant_id=tenant_id,
+        hours=hours,
+    )
+    return metrics
+
+
