@@ -141,7 +141,7 @@ sentinelai/
 │   ├── src/
 │   │   ├── api/               # Typed API client
 │   │   ├── components/        # Navbar, Sidebar, MetricCard, EmptyState
-│   │   ├── views/             # 7 core views (Dashboard, Security, Approvals, Agent, Traces, RAG, Eval)
+│   │   ├── views/             # 12 core cybersecurity views (Dashboard, Security, Approvals, Agent, Traces, RAG, Eval, Red Team, Tools, Audit, Settings, Auth)
 │   │   ├── types/             # TypeScript domain definitions
 │   │   ├── App.tsx            # Main layout & router switch
 │   │   └── main.tsx           # React root
