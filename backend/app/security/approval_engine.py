@@ -192,5 +192,24 @@ class HumanApprovalEngine:
         await session.commit()
         return active
 
+    async def list_all(
+        self,
+        session: AsyncSession,
+        status: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[ApprovalRequest], int]:
+        """Lists all approval requests with status filter and pagination."""
+        stmt = select(ApprovalRequest).order_by(desc(ApprovalRequest.requested_at))
+        if status and status.upper() != "ALL":
+            stmt = stmt.where(ApprovalRequest.status == status.upper())
+
+        count_res = await session.execute(stmt)
+        total = len(count_res.scalars().all())
+
+        paginated = stmt.offset(offset).limit(limit)
+        res = await session.execute(paginated)
+        return list(res.scalars().all()), total
+
 
 approval_engine = HumanApprovalEngine()

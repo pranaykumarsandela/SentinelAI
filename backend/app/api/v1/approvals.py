@@ -1,13 +1,36 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db
-from backend.app.schemas.common import APIResponse
+from backend.app.schemas.common import APIResponse, PaginatedResponse
 from backend.app.schemas.security import ApprovalRequestRead, ApprovalReviewRequest
 from backend.app.security.approval_engine import approval_engine, ApprovalSecurityError
 
 approvals_router = APIRouter(prefix="/approvals", tags=["Human Approvals (HITL)"])
+
+
+@approvals_router.get("", response_model=APIResponse[PaginatedResponse[ApprovalRequestRead]])
+async def list_all_approvals(
+    status: Optional[str] = Query(None, description="Filter: PENDING, APPROVED, REJECTED, EXPIRED, ALL"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    """Lists all approval requests with optional status filtering and pagination."""
+    offset = (page - 1) * page_size
+    items, total = await approval_engine.list_all(session=db, status=status, limit=page_size, offset=offset)
+    valid_items = [ApprovalRequestRead.model_validate(r) for r in items]
+    return APIResponse(
+        success=True,
+        data=PaginatedResponse(
+            items=valid_items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            has_more=(offset + len(items) < total),
+        ),
+    )
 
 
 @approvals_router.get("/pending", response_model=APIResponse[List[ApprovalRequestRead]])

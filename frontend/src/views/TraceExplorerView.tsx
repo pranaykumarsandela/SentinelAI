@@ -30,7 +30,7 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getTraces(50);
+      const data = await api.getTraces(undefined, undefined, undefined, 50);
       setTraces(data);
       if (initialTraceId) {
         const found = data.find((t) => t.id === initialTraceId);
@@ -213,11 +213,12 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
                     <Layers className="w-4 h-4 text-blue-400" />
-                    Execution Spans Hierarchy ({selectedTrace.spans.length} Spans)
+                    Execution Spans Hierarchy ({(selectedTrace.spans || []).length} Spans)
                   </h4>
                   <div className="space-y-2">
-                    {selectedTrace.spans.map((span, idx) => {
-                      const maxLat = Math.max(...selectedTrace.spans.map((s) => s.latency_ms), 1);
+                    {(selectedTrace.spans || []).map((span, idx) => {
+                      const spansList = selectedTrace.spans || [];
+                      const maxLat = Math.max(...spansList.map((s) => s.latency_ms), 1);
                       const widthPercent = Math.max(12, Math.round((span.latency_ms / maxLat) * 100));
 
                       return (

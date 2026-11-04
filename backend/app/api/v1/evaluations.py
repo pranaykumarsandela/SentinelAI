@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from backend.app.schemas.evaluation import (
 )
 from backend.app.evaluation.service import evaluation_service
 from backend.app.evaluation.regression_engine import RegressionComparisonReport
+from backend.app.evaluation.security_benchmarks import STANDARD_SECURITY_DATASET, SecurityBenchmarkCase
 
 evaluations_router = APIRouter(prefix="/evaluations", tags=["Evaluations & Benchmarks"])
 
@@ -205,4 +206,14 @@ async def get_evaluation_metrics_summary(
             "avg_security_recall": round(sum(sr_vals) / len(sr_vals), 4) if sr_vals else None,
         }
     )
+
+
+@evaluations_router.get("/benchmarks/cases", response_model=APIResponse[List[SecurityBenchmarkCase]])
+async def list_benchmark_cases():
+    """Lists the standard labeled adversarial benchmark cases for Red Team Lab testing."""
+    return APIResponse(
+        success=True,
+        data=STANDARD_SECURITY_DATASET,
+    )
+
 
