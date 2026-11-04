@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # --- Tenant Schemas ---
@@ -13,12 +13,11 @@ class TenantCreate(TenantBase):
 
 
 class TenantRead(TenantBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     created_at: datetime
     is_active: bool
-
-    class Config:
-        from_attributes = True
 
 
 # --- Agent Schemas ---
@@ -36,13 +35,12 @@ class AgentCreate(AgentBase):
 
 
 class AgentRead(AgentBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     tenant_id: str
     created_at: datetime
     is_active: bool
-
-    class Config:
-        from_attributes = True
 
 
 # --- Policy Schemas ---
@@ -54,11 +52,10 @@ class PolicyRuleCreate(BaseModel):
 
 
 class PolicyRuleRead(PolicyRuleCreate):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     policy_id: str
-
-    class Config:
-        from_attributes = True
 
 
 class SecurityPolicyBase(BaseModel):
@@ -77,13 +74,12 @@ class SecurityPolicyCreate(SecurityPolicyBase):
 
 
 class SecurityPolicyRead(SecurityPolicyBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     tenant_id: str
     created_at: datetime
     rules: List[PolicyRuleRead] = []
-
-    class Config:
-        from_attributes = True
 
 
 # --- Gateway Execution Schemas ---
@@ -120,6 +116,8 @@ class GatewayExecuteResponse(BaseModel):
 
 # --- Trace Schemas ---
 class TraceSpanRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     trace_id: str
     parent_span_id: Optional[str] = None
@@ -132,11 +130,10 @@ class TraceSpanRead(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class ExecutionTraceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     tenant_id: str
     agent_id: str
@@ -156,12 +153,11 @@ class ExecutionTraceRead(BaseModel):
     completed_at: Optional[datetime] = None
     spans: List[TraceSpanRead] = []
 
-    class Config:
-        from_attributes = True
-
 
 # --- Approval Schemas ---
 class ApprovalRequestRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     trace_id: str
     tool_name: str
@@ -173,12 +169,10 @@ class ApprovalRequestRead(BaseModel):
     reviewer_id: Optional[str] = None
     rejection_reason: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class ApprovalReviewAction(BaseModel):
     action: str = Field(..., pattern="^(APPROVE|REJECT)$")
     reviewer_id: str
     reviewer_notes: Optional[str] = None
+
 
