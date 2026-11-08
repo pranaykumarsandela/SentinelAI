@@ -35,19 +35,30 @@ class DashboardOverviewMetrics(BaseModel):
     successful_requests: int
     blocked_requests: int
     failed_requests: int
-    success_rate_percent: Optional[float]
-    blocked_rate_percent: Optional[float]
-    avg_latency_ms: float
-    median_latency_ms: float
-    p95_latency_ms: float
-    p99_latency_ms: float
-    total_tokens_consumed: int
-    prompt_tokens: int
-    completion_tokens: int
-    total_security_threats: int
-    avg_tool_duration_ms: float
-    sample_size: int
-    is_fresh_install_zero_state: bool
+    success_rate_percent: Optional[float] = None
+    blocked_rate_percent: Optional[float] = None
+    avg_latency_ms: float = 0.0
+    median_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    total_tokens_consumed: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_security_threats: int = 0
+    avg_tool_duration_ms: float = 0.0
+    sample_size: int = 0
+    is_fresh_install_zero_state: bool = False
+
+    # Frontend compatibility fields
+    total_tokens: int = 0
+    average_latency_ms: float = 0.0
+    execution_success_rate: Optional[float] = None
+    blocked_request_rate: Optional[float] = None
+    pending_approvals: int = 0
+    total_cost_usd: float = 0.0
+    live_requests: int = 0
+    mock_requests: int = 0
+    is_fresh_install: bool = False
 
 
 class TimeseriesPoint(BaseModel):
@@ -116,13 +127,24 @@ class MetricsCalculator:
                 total_security_threats=0,
                 avg_tool_duration_ms=0.0,
                 sample_size=0,
-                is_fresh_install_zero_state=True
+                is_fresh_install_zero_state=True,
+                total_tokens=0,
+                average_latency_ms=0.0,
+                execution_success_rate=None,
+                blocked_request_rate=None,
+                pending_approvals=0,
+                total_cost_usd=0.0,
+                live_requests=0,
+                mock_requests=0,
+                is_fresh_install=True,
             )
 
         # Compute counts
         successful = sum(1 for t in traces if t.status == ExecutionStatus.SUCCESS.value)
         blocked = sum(1 for t in traces if t.status == ExecutionStatus.BLOCKED.value)
         failed = sum(1 for t in traces if t.status == ExecutionStatus.ERROR.value)
+        live_count = sum(1 for t in traces if not t.is_mock)
+        mock_count = sum(1 for t in traces if t.is_mock)
 
         # Success rate using (successful + failed) as denominator
         active_denom = successful + failed
@@ -150,6 +172,12 @@ class MetricsCalculator:
         sec_res = await session.execute(sec_stmt)
         threats_count = sec_res.scalar() or 0
 
+        # Pending approvals count
+        from backend.app.models.entities import ApprovalRequest
+        appr_stmt = select(func.count(ApprovalRequest.id)).where(ApprovalRequest.status == "PENDING")
+        appr_res = await session.execute(appr_stmt)
+        pending_count = appr_res.scalar() or 0
+
         # Tool execution durations from Spans
         span_stmt = select(TraceSpan.latency_ms).where(TraceSpan.span_type == SpanType.TOOL_EXECUTION.value)
         span_res = await session.execute(span_stmt)
@@ -174,7 +202,16 @@ class MetricsCalculator:
             total_security_threats=threats_count,
             avg_tool_duration_ms=avg_tool_dur,
             sample_size=total,
-            is_fresh_install_zero_state=False
+            is_fresh_install_zero_state=False,
+            total_tokens=total_tokens,
+            average_latency_ms=avg_latency,
+            execution_success_rate=success_rate,
+            blocked_request_rate=blocked_rate,
+            pending_approvals=pending_count,
+            total_cost_usd=0.0,
+            live_requests=live_count,
+            mock_requests=mock_count,
+            is_fresh_install=False,
         )
 
     async def calculate_timeseries(

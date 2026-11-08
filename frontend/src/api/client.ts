@@ -19,6 +19,10 @@ import {
   ModelRouterConfig,
   DashboardProviderMetric,
   LLMBenchmarkRunDetails,
+  LangfuseStatusResponse,
+  LangfuseConfigResponse,
+  LangfuseMetricsResponse,
+  LangfuseTraceItem,
 } from '../types';
 
 const BASE_URL = '/api/v1';
@@ -302,4 +306,17 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
+
+  // 14. Langfuse Observability Integration
+  getLangfuseStatus: () => fetchJson<LangfuseStatusResponse>(`${BASE_URL}/observability/langfuse/status`),
+  getLangfuseConfig: () => fetchJson<LangfuseConfigResponse>(`${BASE_URL}/observability/langfuse/configuration`),
+  testLangfuseConnection: () =>
+    fetchJson<LangfuseStatusResponse>(`${BASE_URL}/observability/langfuse/test-connection`, {
+      method: 'POST',
+    }),
+  getLangfuseTraces: (page = 1, pageSize = 20) =>
+    fetchJson<{ items: LangfuseTraceItem[]; total: number; page: number; page_size: number; has_more: boolean }>(
+      `${BASE_URL}/observability/langfuse/traces?page=${page}&page_size=${pageSize}`
+    ),
+  getLangfuseMetrics: () => fetchJson<LangfuseMetricsResponse>(`${BASE_URL}/observability/langfuse/metrics`),
 };

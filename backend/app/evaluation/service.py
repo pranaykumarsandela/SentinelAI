@@ -157,6 +157,54 @@ class EvaluationService:
             session.add_all(results_to_save)
             await session.commit()
             await session.refresh(eval_run)
+
+            # Record evaluation run and authentic metrics in Langfuse
+            try:
+                from backend.app.observability.langfuse_service import langfuse_service
+                if langfuse_service.is_operational:
+                    eval_tid = str(eval_run.id)
+                    langfuse_service.start_trace(
+                        trace_id=eval_tid,
+                        name=f"Evaluation Benchmark: {eval_run.dataset_name}",
+                        tags=["evaluation", eval_run.run_type, eval_run.model_identifier],
+                        metadata={
+                            "evaluation_run_id": str(eval_run.id),
+                            "run_type": eval_run.run_type,
+                            "dataset_name": eval_run.dataset_name,
+                            "dataset_version": eval_run.dataset_version,
+                            "model_identifier": eval_run.model_identifier,
+                            "total_samples": eval_run.total_samples,
+                            "passed_samples": eval_run.passed_samples,
+                        },
+                        input_data={"run_type": eval_run.run_type, "dataset_name": eval_run.dataset_name},
+                    )
+
+                    if eval_run.faithfulness_score is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "ragas_faithfulness", eval_run.faithfulness_score)
+                    if eval_run.relevance_score is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "ragas_answer_relevancy", eval_run.relevance_score)
+                    if eval_run.context_precision_score is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "ragas_context_precision", eval_run.context_precision_score)
+                    if eval_run.context_recall_score is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "ragas_context_recall", eval_run.context_recall_score)
+
+                    if eval_run.security_precision is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "security_precision", eval_run.security_precision)
+                    if eval_run.security_recall is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "security_recall", eval_run.security_recall)
+                    if eval_run.security_f1 is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "security_f1", eval_run.security_f1)
+                    if eval_run.security_robustness_score is not None:
+                        langfuse_service.record_evaluation_score(eval_tid, "security_robustness", eval_run.security_robustness_score)
+
+                    langfuse_service.end_trace(
+                        trace_id=eval_tid,
+                        output_data={"passed_samples": eval_run.passed_samples, "total_samples": eval_run.total_samples},
+                        status="SUCCESS",
+                    )
+            except Exception:
+                pass
+
             return eval_run
 
         except Exception as e:

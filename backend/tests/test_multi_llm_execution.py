@@ -267,54 +267,65 @@ async def test_provider_health_check_contracts():
 # ==============================================================================
 @pytest.mark.asyncio
 async def test_intelligent_provider_fallback_recording(test_multi_db: AsyncSession):
-    # Configure router with primary as groq (unconfigured) and fallback as mock
-    model_router.update_configuration(
-        default_provider="mock",
-        default_model="mock-sentinel-v1",
-        task_routing={
-            "test_fallback_task": {"provider": "groq", "model": "llama-3.3-70b-versatile"}
-        },
-        fallback_chains={
-            "test_fallback_task": [
-                {"provider": "mock", "model": "mock-sentinel-v1"}
-            ]
-        }
-    )
+    orig_groq = settings.GROQ_API_KEY
+    orig_gem = settings.GEMINI_API_KEY
+    orig_goog = settings.GOOGLE_API_KEY
+    try:
+        settings.GROQ_API_KEY = None
+        settings.GEMINI_API_KEY = None
+        settings.GOOGLE_API_KEY = None
+        # Configure router with primary as groq (unconfigured) and fallback as mock
+        model_router.update_configuration(
+            default_provider="mock",
+            default_model="mock-sentinel-v1",
+            task_routing={
+                "test_fallback_task": {"provider": "groq", "model": "llama-3.3-70b-versatile"}
+            },
+            fallback_chains={
+                "test_fallback_task": [
+                    {"provider": "mock", "model": "mock-sentinel-v1"}
+                ]
+            }
+        )
 
-    trace_id = str(uuid.uuid4())
-    # Execute through gateway
-    res = await multi_llm_gateway.execute(
-        prompt="Explain quantum encryption principles.",
-        task_type="test_fallback_task",
-        trace_id=trace_id,
-        db=test_multi_db,
-    )
+        trace_id = str(uuid.uuid4())
+        # Execute through gateway
+        res = await multi_llm_gateway.execute(
+            prompt="Explain quantum encryption principles.",
+            task_type="test_fallback_task",
+            trace_id=trace_id,
+            db=test_multi_db,
+        )
 
-    assert res.status == "success"
-    assert res.provider == "mock"
+        assert res.status == "success"
+        assert res.provider == "mock"
 
-    # Verify both attempts are recorded in llm_invocations
-    stmt = select(LLMInvocation).where(LLMInvocation.trace_id == trace_id).order_by(LLMInvocation.started_at)
-    inv_res = await test_multi_db.execute(stmt)
-    invocations = inv_res.scalars().all()
+        # Verify both attempts are recorded in llm_invocations
+        stmt = select(LLMInvocation).where(LLMInvocation.trace_id == trace_id).order_by(LLMInvocation.started_at)
+        inv_res = await test_multi_db.execute(stmt)
+        invocations = inv_res.scalars().all()
 
-    assert len(invocations) >= 2
-    # First invocation failed (Groq missing credentials)
-    assert invocations[0].status == "ERROR"
-    assert invocations[0].provider == "groq"
-    # Second invocation succeeded (Mock fallback)
-    assert invocations[1].status == "SUCCESS"
-    assert invocations[1].provider == "mock"
-    assert invocations[1].fallback_occurred is True
+        assert len(invocations) >= 2
+        # First invocation failed (Groq missing credentials)
+        assert invocations[0].status == "ERROR"
+        assert invocations[0].provider == "groq"
+        # Second invocation succeeded (Mock fallback)
+        assert invocations[1].status == "SUCCESS"
+        assert invocations[1].provider == "mock"
+        assert invocations[1].fallback_occurred is True
 
-    # Verify fallback event is recorded
-    stmt_fb = select(LLMFallbackEvent).where(LLMFallbackEvent.trace_id == trace_id)
-    fb_res = await test_multi_db.execute(stmt_fb)
-    fb_events = fb_res.scalars().all()
-    assert len(fb_events) == 1
-    assert fb_events[0].primary_provider == "groq"
-    assert fb_events[0].fallback_provider == "mock"
-    assert fb_events[0].execution_result == "SUCCESS"
+        # Verify fallback event is recorded
+        stmt_fb = select(LLMFallbackEvent).where(LLMFallbackEvent.trace_id == trace_id)
+        fb_res = await test_multi_db.execute(stmt_fb)
+        fb_events = fb_res.scalars().all()
+        assert len(fb_events) == 1
+        assert fb_events[0].primary_provider == "groq"
+        assert fb_events[0].fallback_provider == "mock"
+        assert fb_events[0].execution_result == "SUCCESS"
+    finally:
+        settings.GROQ_API_KEY = orig_groq
+        settings.GEMINI_API_KEY = orig_gem
+        settings.GOOGLE_API_KEY = orig_goog
 
 
 # ==============================================================================

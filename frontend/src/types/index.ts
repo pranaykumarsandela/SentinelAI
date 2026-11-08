@@ -383,3 +383,62 @@ export interface LLMBenchmarkRunDetails {
   completed_at: string | null;
   results: LLMBenchmarkResultItem[];
 }
+
+export interface LangfuseStatusResponse {
+  enabled: boolean;
+  configured: boolean;
+  status: 'HEALTHY' | 'NOT_CONFIGURED' | 'UNREACHABLE' | 'DISABLED';
+  host: string;
+  public_key_masked: string;
+  latency_ms: number | null;
+  total_traces_exported: number;
+  total_failed_deliveries: number;
+  last_successful_delivery: string | null;
+  message: string;
+  timestamp: number;
+}
+
+export interface LangfuseConfigResponse {
+  enabled: boolean;
+  configured: boolean;
+  host: string;
+  public_key_masked: string;
+  secret_key_masked: string;
+  timeout_seconds: number;
+  capture_input_output: boolean;
+  sdk_available: boolean;
+  sdk_version: string | null;
+}
+
+export interface LangfuseTraceItem {
+  id: string;
+  langfuse_trace_id: string;
+  langfuse_url: string | null;
+  agent_id: string;
+  session_id: string | null;
+  input_prompt: string;
+  sanitized_input: string | null;
+  output_response: string | null;
+  sanitized_output: string | null;
+  status: string;
+  is_mock: boolean;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_latency_ms: number;
+  estimated_cost_usd: number;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface LangfuseMetricsResponse {
+  enabled: boolean;
+  configured: boolean;
+  is_operational: boolean;
+  host: string;
+  total_traces_exported: number;
+  total_failed_deliveries: number;
+  delivery_success_rate: number | null;
+  last_delivery_timestamp: string | null;
+  last_error: string | null;
+}

@@ -32,6 +32,7 @@ from backend.app.services.llm_provider import get_llm_provider, BaseLLMProvider,
 from backend.app.services.llm_gateway import multi_llm_gateway
 from backend.app.services.model_router import model_router
 from backend.app.observability.logger import sentinel_logger
+from backend.app.observability.langfuse_service import langfuse_service
 
 
 def utc_now() -> datetime:
@@ -119,6 +120,18 @@ def node_guard_input(state: OrchestratorState) -> Dict[str, Any]:
     }
     spans.append(span)
 
+    # Langfuse telemetry hook
+    try:
+        langfuse_service.record_guardrail_decision(
+            trace_id=state["trace_id"],
+            stage="INPUT_FIREWALL",
+            verdict=inspection.verdict.value,
+            violations=[v.model_dump() for v in inspection.violations],
+            sanitized_sample=inspection.sanitized_input,
+        )
+    except Exception as lf_err:
+        sentinel_logger.debug(f"Langfuse hook error in node_guard_input: {lf_err}")
+
     if is_blocked:
         for v in inspection.violations:
             violation_entry = {
@@ -141,6 +154,16 @@ def node_guard_input(state: OrchestratorState) -> Dict[str, Any]:
                 "action": "BLOCKED",
                 "details": violation_entry["details"],
             })
+            try:
+                langfuse_service.record_security_event(
+                    trace_id=state["trace_id"],
+                    event_type=violation_entry["event_type"],
+                    severity=violation_entry["severity"],
+                    action="BLOCKED",
+                    details=violation_entry["details"],
+                )
+            except Exception as lf_err:
+                sentinel_logger.debug(f"Langfuse hook error in node_guard_input event: {lf_err}")
 
         sentinel_logger.warning(
             f"Input blocked by Security Guard: {inspection.violations}",
@@ -247,6 +270,30 @@ def node_retrieve_context(state: OrchestratorState) -> Dict[str, Any]:
         "status": "OK",
         "created_at": utc_now(),
     })
+
+    # Langfuse telemetry hook
+    try:
+        if state.get("use_rag") and retrieved_chunks:
+            langfuse_service.record_rag_retrieval(
+                trace_id=state["trace_id"],
+                query=state.get("sanitized_input") or state["input_prompt"],
+                retrieved_chunks=retrieved_chunks,
+                strategy="hybrid_bm25_dense_rrf",
+                top_k=len(retrieved_chunks),
+                latency_ms=latency_ms,
+                groundedness_verdict="GROUNDED" if retrieved_chunks else "NO_CONTEXT",
+            )
+            for ev in sec_events:
+                if ev.get("event_type") == SecurityEventType.INDIRECT_PROMPT_INJECTION.value:
+                    langfuse_service.record_security_event(
+                        trace_id=state["trace_id"],
+                        event_type=ev["event_type"],
+                        severity=ev["severity"],
+                        action=ev.get("action", "FLAG"),
+                        details=ev.get("details"),
+                    )
+    except Exception as lf_err:
+        sentinel_logger.debug(f"Langfuse hook error in node_retrieve_context: {lf_err}")
 
     return {
         "spans": spans,
@@ -419,6 +466,29 @@ def node_authorize_tools(state: OrchestratorState) -> Dict[str, Any]:
         "created_at": utc_now(),
     })
 
+    # Langfuse telemetry hook
+    try:
+        if execution_status == ExecutionStatus.BLOCKED.value:
+            for v in violations:
+                if v.get("event_type") == SecurityEventType.UNAUTHORIZED_TOOL.value:
+                    langfuse_service.record_security_event(
+                        trace_id=state["trace_id"],
+                        event_type=v["event_type"],
+                        severity=v["severity"],
+                        action="BLOCK",
+                        details=v.get("details"),
+                    )
+        elif execution_status == ExecutionStatus.PENDING_APPROVAL.value:
+            langfuse_service.record_security_event(
+                trace_id=state["trace_id"],
+                event_type="TOOL_APPROVAL_REQUIRED",
+                severity="MEDIUM",
+                action="PENDING_APPROVAL",
+                details={"approval_id": pending_approval_id},
+            )
+    except Exception as lf_err:
+        sentinel_logger.debug(f"Langfuse hook error in node_authorize_tools: {lf_err}")
+
     return {
         "spans": spans,
         "violations": violations,
@@ -471,6 +541,22 @@ async def node_execute_tools(state: OrchestratorState) -> Dict[str, Any]:
             "status": "OK" if exec_res.success else "ERROR",
             "created_at": utc_now(),
         })
+
+        # Langfuse tool execution span
+        try:
+            t_span = langfuse_service.start_span(
+                trace_id=state["trace_id"],
+                name=f"Tool: {tool_name}",
+                as_type="tool",
+                input_data=args,
+            )
+            langfuse_service.end_span(
+                t_span,
+                output_data={"success": exec_res.success, "data": exec_res.data, "error": exec_res.error},
+                status="OK" if exec_res.success else "ERROR",
+            )
+        except Exception as lf_err:
+            sentinel_logger.debug(f"Langfuse hook error in tool execution span: {lf_err}")
 
     # Call LLM to synthesize final response incorporating tool results via Multi-LLM Gateway
     synth_prompt = (
@@ -546,6 +632,18 @@ def node_guard_output(state: OrchestratorState) -> Dict[str, Any]:
         "created_at": utc_now(),
     })
 
+    # Langfuse telemetry hook
+    try:
+        langfuse_service.record_guardrail_decision(
+            trace_id=state["trace_id"],
+            stage="OUTPUT_GUARD",
+            verdict=out_res.verdict.value,
+            violations=[v.model_dump() for v in out_res.violations],
+            sanitized_sample=out_res.sanitized_output,
+        )
+    except Exception as lf_err:
+        sentinel_logger.debug(f"Langfuse hook error in node_guard_output: {lf_err}")
+
     if is_blocked:
         for v in out_res.violations:
             violation_entry = {
@@ -568,6 +666,16 @@ def node_guard_output(state: OrchestratorState) -> Dict[str, Any]:
                 "action": "BLOCK",
                 "details": violation_entry["details"],
             })
+            try:
+                langfuse_service.record_security_event(
+                    trace_id=state["trace_id"],
+                    event_type=violation_entry["event_type"],
+                    severity=violation_entry["severity"],
+                    action="BLOCK",
+                    details=violation_entry["details"],
+                )
+            except Exception as lf_err:
+                sentinel_logger.debug(f"Langfuse hook error in node_guard_output event: {lf_err}")
 
         return {
             "spans": spans,
@@ -730,6 +838,26 @@ class AgentOrchestrator:
             "error": None,
         }
 
+        # Start correlated root trace observation in Langfuse
+        try:
+            langfuse_service.start_trace(
+                trace_id=trace_id,
+                name=f"Agent Execution: {request.agent_id}",
+                user_id=u_id,
+                session_id=request.session_id,
+                tags=[tenant_id, role, f"is_mock:{request.is_mock}"],
+                metadata={
+                    "tenant_id": tenant_id,
+                    "agent_id": request.agent_id,
+                    "role": role,
+                    "use_rag": use_rag,
+                    "is_mock": request.is_mock,
+                },
+                input_data={"prompt": request.prompt},
+            )
+        except Exception as lf_err:
+            sentinel_logger.debug(f"Langfuse start_trace error: {lf_err}")
+
         # Execute LangGraph workflow
         final_state: OrchestratorState = await self.graph.ainvoke(initial_state)
 
@@ -827,6 +955,24 @@ class AgentOrchestrator:
             db.add(ev_entity)
 
         await db.commit()
+
+        # Finalize Langfuse trace with authentic metrics
+        try:
+            langfuse_service.end_trace(
+                trace_id=trace_id,
+                output_data=final_state.get("final_response"),
+                status=final_state.get("status", ExecutionStatus.SUCCESS.value),
+                total_tokens=final_state.get("total_tokens", 0),
+                total_cost_usd=final_state.get("estimated_cost_usd", 0.0),
+                metadata={
+                    "provider_used": final_state.get("provider_used"),
+                    "model_name": final_state.get("model_name"),
+                    "violations_count": len(final_state.get("violations", [])),
+                    "total_latency_ms": final_state.get("total_latency_ms", 0.0),
+                },
+            )
+        except Exception as lf_err:
+            sentinel_logger.debug(f"Langfuse end_trace error: {lf_err}")
 
         # Format violations
         violation_items = [

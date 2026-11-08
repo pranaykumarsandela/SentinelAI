@@ -18,6 +18,7 @@ from backend.app.api.v1.dashboard import dashboard_router
 from backend.app.api.v1.agents import router as agents_router
 from backend.app.api.v1.traces import router as traces_router
 from backend.app.api.v1.providers import providers_router
+from backend.app.api.v1.observability import observability_router
 
 api_v1_router = APIRouter(prefix="/v1")
 
@@ -32,6 +33,7 @@ api_v1_router.include_router(tools_router)
 api_v1_router.include_router(approvals_router)
 api_v1_router.include_router(documents_router)
 api_v1_router.include_router(rag_router)
+api_v1_router.include_router(observability_router)
 
 
 @api_v1_router.get("/health", response_model=APIResponse[dict])
@@ -54,6 +56,7 @@ async def health_check():
                 "mock_provider": "READY",
                 "rag_engine": "ACTIVE",
                 "qdrant_store": "INITIALIZED",
+                "langfuse_observability": "INITIALIZED",
             }
         }
     )
@@ -82,7 +85,7 @@ async def get_system_settings():
             "database_dialect": "sqlite" if "sqlite" in settings.DATABASE_URL else "postgresql",
             "default_llm_provider": settings.DEFAULT_LLM_PROVIDER,
             "default_llm_model": settings.DEFAULT_LLM_MODEL,
-            "gemini_configured": bool(settings.GEMINI_API_KEY),
+            "gemini_configured": bool(settings.effective_gemini_api_key),
             "groq_configured": bool(settings.GROQ_API_KEY),
             "openai_configured": bool(settings.OPENAI_API_KEY),
             "langfuse_configured": bool(settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY),

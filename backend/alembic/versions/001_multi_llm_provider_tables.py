@@ -156,3 +156,4 @@ def downgrade() -> None:
     op.drop_table('llm_invocations')
     op.drop_table('llm_model_configs')
     op.drop_table('llm_providers')
+

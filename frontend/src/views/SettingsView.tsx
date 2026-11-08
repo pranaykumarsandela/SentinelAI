@@ -17,12 +17,14 @@ import {
   Network,
   Radio,
   Check,
+  ExternalLink,
 } from 'lucide-react';
 import {
   SystemSettingsItem,
   ProviderStatusItem,
   ProviderHealthCheckItem,
   ModelRouterConfig,
+  LangfuseStatusResponse,
 } from '../types';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -50,15 +52,21 @@ export const SettingsView: React.FC = () => {
   const [savingRouter, setSavingRouter] = useState(false);
   const [routerSuccess, setRouterSuccess] = useState(false);
 
+  // Langfuse Observability States
+  const [langfuseStatus, setLangfuseStatus] = useState<LangfuseStatusResponse | null>(null);
+  const [testingLangfuse, setTestingLangfuse] = useState(false);
+  const [langfuseTestMessage, setLangfuseTestMessage] = useState<string | null>(null);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
-      const [resSettings, provList, provHealthList, modelsData, configData] = await Promise.all([
+      const [resSettings, provList, provHealthList, modelsData, configData, lfStatus] = await Promise.all([
         api.getSettings(),
         api.getProviders().catch(() => []),
         api.getProvidersHealth().catch(() => []),
         api.getProviderModels().catch(() => ({ models: {}, pricing_catalog_version: '1.0' })),
         api.getProviderConfiguration().catch(() => null),
+        api.getLangfuseStatus().catch(() => null),
       ]);
 
       setSettingsData(resSettings);
@@ -76,10 +84,25 @@ export const SettingsView: React.FC = () => {
       setProviderHealth(healthMap);
       setSupportedModels(modelsData?.models || {});
       setRouterConfig(configData);
+      setLangfuseStatus(lfStatus);
     } catch (err: any) {
       console.error('Failed to load settings:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleTestLangfuse = async () => {
+    try {
+      setTestingLangfuse(true);
+      setLangfuseTestMessage(null);
+      const res = await api.testLangfuseConnection();
+      setLangfuseStatus(res);
+      setLangfuseTestMessage(res.message);
+    } catch (err: any) {
+      setLangfuseTestMessage(`Connection test failed: ${err.message}`);
+    } finally {
+      setTestingLangfuse(false);
     }
   };
 
@@ -312,6 +335,138 @@ export const SettingsView: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* LANGFUSE PRODUCTION OBSERVABILITY MANAGEMENT */}
+      {/* ============================================================== */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Activity className="w-4 h-4 text-orange-400" />
+                Langfuse Production Observability
+              </h2>
+              {langfuseStatus && (
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold flex items-center gap-1.5 ${
+                    langfuseStatus.status === 'HEALTHY'
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : langfuseStatus.status === 'NOT_CONFIGURED'
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      : langfuseStatus.status === 'UNREACHABLE'
+                      ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                      : 'bg-gray-800 text-gray-400 border border-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      langfuseStatus.status === 'HEALTHY'
+                        ? 'bg-emerald-400 animate-pulse'
+                        : langfuseStatus.status === 'NOT_CONFIGURED'
+                        ? 'bg-amber-400'
+                        : langfuseStatus.status === 'UNREACHABLE'
+                        ? 'bg-rose-400'
+                        : 'bg-gray-400'
+                    }`}
+                  />
+                  {langfuseStatus.status}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Dual-layer telemetry pipeline: PostgreSQL traces enriched with OpenTelemetry 32-hex Langfuse correlation, guardrails, and RAGAS evaluations.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTestLangfuse}
+              disabled={testingLangfuse}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700/60 rounded-lg text-xs font-medium text-white transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${testingLangfuse ? 'animate-spin text-orange-400' : 'text-gray-400'}`} />
+              {testingLangfuse ? 'Probing Langfuse...' : 'Test Connection'}
+            </button>
+            <a
+              href={langfuseStatus?.host || 'https://us.cloud.langfuse.com'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 rounded-lg text-xs font-semibold text-orange-300 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open Cloud Console
+            </a>
+          </div>
+        </div>
+
+        {langfuseTestMessage && (
+          <div
+            className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+              langfuseStatus?.status === 'HEALTHY'
+                ? 'bg-emerald-950/40 border border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-950/40 border border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {langfuseStatus?.status === 'HEALTHY' ? (
+              <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            )}
+            <span>{langfuseTestMessage}</span>
+          </div>
+        )}
+
+        {/* Telemetry Overview Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+          <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+            <span className="text-gray-500 block text-[10px]">HOST ENDPOINT</span>
+            <strong className="text-white text-xs font-mono truncate block" title={langfuseStatus?.host}>
+              {langfuseStatus?.host || 'N/A'}
+            </strong>
+          </div>
+          <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+            <span className="text-gray-500 block text-[10px]">PUBLIC KEY</span>
+            <strong className="text-white text-xs font-mono truncate block">
+              {langfuseStatus?.public_key_masked || 'None'}
+            </strong>
+          </div>
+          <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+            <span className="text-gray-500 block text-[10px]">ROUND-TRIP LATENCY</span>
+            <strong className="text-white text-sm">
+              {langfuseStatus?.latency_ms !== null && langfuseStatus?.latency_ms !== undefined
+                ? `${langfuseStatus.latency_ms} ms`
+                : 'N/A'}
+            </strong>
+          </div>
+          <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+            <span className="text-gray-500 block text-[10px]">EXPORTED TRACES</span>
+            <strong className="text-emerald-400 text-sm">
+              {langfuseStatus?.total_traces_exported ?? 0}
+            </strong>
+          </div>
+          <div className="bg-gray-950 p-2.5 rounded-lg border border-gray-800">
+            <span className="text-gray-500 block text-[10px]">FAILED DELIVERIES</span>
+            <strong
+              className={`text-sm ${
+                (langfuseStatus?.total_failed_deliveries ?? 0) > 0 ? 'text-rose-400' : 'text-gray-400'
+              }`}
+            >
+              {langfuseStatus?.total_failed_deliveries ?? 0}
+            </strong>
+          </div>
+        </div>
+
+        <div className="p-3 bg-gray-950/80 border border-gray-800/80 rounded-lg text-[11px] text-gray-400 space-y-1">
+          <div className="flex items-center gap-1.5 text-gray-300 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            Mandatory Data Integrity & Fail-Safe Observability Guarantee
+          </div>
+          <p className="text-[10px] leading-relaxed">
+            Langfuse operates as a non-blocking asynchronous export pipeline. All tokens, model parameters, and latencies are authentic provider metadata (zero fabricated tokens or costs). If Langfuse is unreachable, the core SentinelAI agent execution continues without disruption.
+          </p>
         </div>
       </div>
 

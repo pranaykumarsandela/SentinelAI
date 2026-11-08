@@ -17,7 +17,8 @@ SentinelAI employs a multi-tiered automated verification suite ensuring 100% dat
 | `backend/tests/test_evaluation_engine.py` | RAGAS & Security Evaluation Suite | 7 | Confusion matrix, FPR/F1, Latency percentiles, Regression diff |
 | `backend/tests/test_e2e_integration.py` | Full Lifecycle End-to-End | 1 | 9-step complete platform integration audit |
 | `backend/tests/test_multi_llm_execution.py`| Multi-LLM Gateway & Failovers | 10 | Gemini/Groq/OpenAI adapters, fallbacks, pricing, telemetry |
-| **Total Test Count** | **Complete System** | **49** | **100% Passing Automated Tests** |
+| `backend/tests/test_langfuse_integration.py`| Langfuse Observability & Cloud | 13 | Trace lifecycle, nested spans, OTel IDs, live cloud probe |
+| **Total Test Count** | **Complete System** | **62** | **100% Passing Automated Tests** |
 
 ---
 
@@ -73,3 +74,4 @@ Expected output:
    - `total_tokens`, `prompt_tokens`, and `completion_tokens` are populated only from real upstream metadata. If metadata is absent, tokens remain `0` and cost remains `$0.00`.
 4. **Isolated Test Databases**:
    - Each test fixture uses an ephemeral SQLite database (`sqlite+aiosqlite:///test_*.db`) cleanly removed on teardown, preventing cross-test pollution.
+

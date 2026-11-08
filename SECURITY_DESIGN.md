@@ -85,3 +85,12 @@ LLMs generate tool calling proposals; they never execute tools directly. The Sen
 
 ### 3.4 Multi-LLM Provider Isolation
 External LLM provider API keys are strictly loaded from server-side environment variables and never surfaced to the frontend or included in serialized client responses.
+
+### 3.5 Observability Privacy & Credential Scrubbing
+When telemetry is forwarded to external observability systems (such as Langfuse Cloud or OpenTelemetry collectors):
+- Ingress and egress payloads pass through recursive sanitization scrubbers.
+- Bearer tokens, OpenAI/Groq API keys, passwords, SSNs, and credit cards are scrubbed prior to export.
+- Upstream credentials (`LANGFUSE_SECRET_KEY`) are masked in logs and configuration API endpoints.
+- Raw retrieved RAG chunks are truncated to previews with verified chunk identifiers.
+- Internal chain-of-thought is protected from client or external trace disclosure.
+

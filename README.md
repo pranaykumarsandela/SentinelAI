@@ -1,14 +1,15 @@
 # SentinelAI – Enterprise Agent Security & Evaluation Platform
 
-[![Build Status](https://img.shields.io/badge/tests-49%20passed-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-62%20passed-brightgreen.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)]()
 [![React](https://img.shields.io/badge/React-18-61dafb.svg)]()
 [![Multi-LLM](https://img.shields.io/badge/Multi--LLM-Gemini%20%7C%20Groq%20%7C%20OpenAI%20%7C%20Mock-purple.svg)]()
+[![Observability](https://img.shields.io/badge/Langfuse-Cloud%20%7C%20Self--Hosted-orange.svg)]()
 [![Data Integrity](https://img.shields.io/badge/Data%20Integrity-100%25%20Authentic-emerald.svg)]()
 
-SentinelAI is an enterprise-grade AI agent firewall, orchestration runtime, and continuous evaluation platform. It provides deterministic and model-assisted defense against prompt injection, jailbreaks, indirect document injection, and unauthorized tool calls, while orchestrating agents with LangGraph and monitoring performance with rigorous, zero-fake data integrity.
+SentinelAI is an enterprise-grade AI agent firewall, orchestration runtime, and continuous evaluation platform. It provides deterministic and model-assisted defense against prompt injection, jailbreaks, indirect document injection, and unauthorized tool calls, while orchestrating agents with LangGraph, monitoring performance with production Langfuse observability, and evaluating systems with rigorous, zero-fake data integrity.
 
 ---
 
@@ -110,6 +111,14 @@ SentinelAI adheres strictly to the **Mandatory Data Integrity Policy**:
 - **React 18 + TypeScript SPA**: Enterprise dashboard with live metric cards, Recharts time-series charts, approval review drawers, interactive agent playground, knowledge base manager, security incident audit log, Multi-LLM provider telemetry, and trace timeline viewer.
 - **Distributed Database Tracing**: Every agent transaction generates an `ExecutionTrace` with step-by-step `TraceSpan` timings, token accounting, exact provider and model metadata, fallback indicators, and Langfuse-compatible JSON logging.
 
+### 7. Production Langfuse Observability Integration
+- **Dual-Layer Observability Architecture**: Preserves full PostgreSQL execution persistence while transmitting OpenTelemetry-standard telemetry to Langfuse Cloud or self-hosted instances.
+- **Correlated Trace Identifiers**: Automatically normalizes SentinelAI UUIDs to 32-hex lowercase OpenTelemetry trace IDs (`uuid.hex`), allowing instant cross-referencing between local database records and Langfuse dashboards.
+- **Hierarchical Observation Spans**: Emits native Langfuse observation types (`agent` for root execution, `guardrail` for input/output security decisions, `retriever` for hybrid RAG search, `tool` for server-side tool invocations, and `generation` for Multi-LLM provider calls).
+- **Automated Evaluation Scoring**: Submits RAGAS metrics (`ragas_faithfulness`, `ragas_answer_relevancy`, `ragas_context_precision`, `ragas_context_recall`) and security robustness scores (`security_precision`, `security_recall`, `security_f1`) directly to Langfuse trace scorecards.
+- **Non-Blocking Graceful Degradation**: Telemetry operations run asynchronously with fail-safe error isolation. If Langfuse is unreachable or credentials are unconfigured, core agent execution continues without latency overhead or interruption.
+- **Zero Token & Metric Fabrication**: Strictly forwards authentic provider token counts, true measured latencies, and exact costs computed via `PRICING_CATALOG_V1`. Redacts API keys, bearer tokens, and PII before transmission.
+
 ---
 
 ## Technology Stack
@@ -144,7 +153,7 @@ sentinelai/
 │   │   ├── security/          # Input guards, tool policy engine, HITL approval, output guard
 │   │   ├── services/          # LLM provider abstraction (Mock, Groq, OpenAI)
 │   │   └── main.py            # FastAPI entrypoint & lifespan lifecycle
-│   └── tests/                 # 39 passing unit, integration, and E2E tests
+│   └── tests/                 # 62 passing unit, integration, and E2E tests
 ├── frontend/
 │   ├── src/
 │   │   ├── api/               # Typed API client
@@ -231,7 +240,8 @@ Visit [http://localhost:5173](http://localhost:5173) in your browser.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/v1/dashboard/metrics` | Returns live calculated metrics from persisted database records |
+| `GET` | `/api/v1/health` | Platform readiness and subsystem status (`database`, `qdrant`, `firewall`, `langfuse`) |
+| `GET` | `/api/v1/dashboard/metrics` | Returns live calculated metrics from persisted database records (live vs mock) |
 | `GET` | `/api/v1/dashboard/timeseries` | Returns authentic hourly request volume, latency, and tokens |
 | `POST` | `/api/v1/agents/execute` | Main agent gateway: Input Guard -> RAG -> Plan -> Tool Auth -> Output Guard |
 | `POST` | `/api/v1/security/guard/input` | Standalone endpoint to inspect input against injection/jailbreak/PII rules |
@@ -245,62 +255,111 @@ Visit [http://localhost:5173](http://localhost:5173) in your browser.
 | `POST` | `/api/v1/evaluations/compare` | Compares two evaluation runs for performance regressions |
 | `GET` | `/api/v1/traces` | Lists execution traces with token counts, latency, and status |
 | `GET` | `/api/v1/traces/{id}` | Returns comprehensive trace details with nested execution spans |
+| `GET` | `/api/v1/providers` | Lists configured LLM providers, active models, and capabilities |
+| `GET` | `/api/v1/providers/health` | Returns health status and measured round-trip latencies across all providers |
+| `POST` | `/api/v1/providers/health-check` | Performs an on-demand live connectivity test for a specific provider |
+| `GET` | `/api/v1/providers/configuration`| Returns active task routing mappings and fallback chains |
+| `PUT` | `/api/v1/providers/configuration`| Updates specialized task routing (planning, classification, answering) |
+| `POST` | `/api/v1/llm/benchmarks/run` | Runs standardized benchmark suite across selected providers concurrently |
+| `GET` | `/api/v1/observability/langfuse/status` | Live Langfuse connectivity, authentication status, and export counters |
+| `GET` | `/api/v1/observability/langfuse/configuration` | Sanitized Langfuse settings with securely masked public & secret keys |
+| `POST` | `/api/v1/observability/langfuse/test-connection` | Live authentication probe to Langfuse Cloud or self-hosted endpoint |
+| `GET` | `/api/v1/observability/langfuse/traces` | Correlates database traces with 32-hex OTel Langfuse trace IDs and deep links |
+| `GET` | `/api/v1/observability/langfuse/metrics` | Returns export telemetry metrics (total exported, failed, success rate) |
 
 ---
 
 ## Verification & Test Suite
 
-The SentinelAI platform is backed by **39 exhaustive automated tests**:
+The SentinelAI platform is backed by **62 exhaustive automated tests** across 8 test suites:
 
 ```bash
 # Execute the complete backend test suite:
-pytest backend/tests -v
+pytest backend/tests/ -v
 ```
 
-### Verified Test Results (39 / 39 Passed)
+### Verified Test Results (62 / 62 Passed in 31.20s)
 
 ```
-backend/tests/test_agent_orchestrator.py::test_normal_agent_execution_persists_trace_and_spans PASSED
-backend/tests/test_agent_orchestrator.py::test_direct_prompt_injection_blocked_by_orchestrator PASSED
-backend/tests/test_agent_orchestrator.py::test_tool_execution_authorized PASSED
-backend/tests/test_agent_orchestrator.py::test_tool_execution_requiring_human_approval PASSED
-backend/tests/test_agent_orchestrator.py::test_traces_and_agents_api_endpoints PASSED
-backend/tests/test_e2e_integration.py::test_complete_platform_lifecycle_and_data_integrity PASSED
-backend/tests/test_evaluation_engine.py::test_percentile_latency_calculation PASSED
-backend/tests/test_evaluation_engine.py::test_confusion_matrix_calculations_and_zero_denominators PASSED
-backend/tests/test_evaluation_engine.py::test_known_fixture_metrics_calculation PASSED
-backend/tests/test_evaluation_engine.py::test_fresh_install_zero_metrics PASSED
-backend/tests/test_evaluation_engine.py::test_ragas_evaluation_engine_metrics PASSED
-backend/tests/test_evaluation_engine.py::test_regression_comparison_engine PASSED
-backend/tests/test_evaluation_engine.py::test_evaluations_and_dashboard_api_endpoints PASSED
-backend/tests/test_foundations.py::test_settings_loaded PASSED
-backend/tests/test_foundations.py::test_deterministic_mock_llm PASSED
-backend/tests/test_foundations.py::test_deterministic_mock_llm_tool_simulation PASSED
-backend/tests/test_foundations.py::test_database_models_persistence PASSED
-backend/tests/test_foundations.py::test_fastapi_endpoints PASSED
-backend/tests/test_rag_subsystem.py::test_document_loaders_txt_md_docx PASSED
-backend/tests/test_rag_subsystem.py::test_document_chunking PASSED
-backend/tests/test_rag_subsystem.py::test_embedding_service PASSED
-backend/tests/test_rag_subsystem.py::test_hybrid_retrieval_and_cross_encoder PASSED
-backend/tests/test_rag_subsystem.py::test_indirect_prompt_injection_guard PASSED
-backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_execution_grounded PASSED
-backend/tests/test_rag_subsystem.py::test_agentic_rag_graph_poor_retrieval_retry_and_insufficient_evidence PASSED
-backend/tests/test_rag_subsystem.py::test_agentic_rag_empty_corpus PASSED
-backend/tests/test_rag_subsystem.py::test_full_rag_api_lifecycle PASSED
-backend/tests/test_security_engine.py::test_normal_request_allowed PASSED
-backend/tests/test_security_engine.py::test_direct_prompt_injection_blocked PASSED
-backend/tests/test_security_engine.py::test_jailbreak_attempt_blocked PASSED
-backend/tests/test_security_engine.py::test_indirect_injection_through_retrieved_documents PASSED
-backend/tests/test_security_engine.py::test_unauthorized_tool_invocation PASSED
-backend/tests/test_security_engine.py::test_invalid_refund_amount PASSED
-backend/tests/test_security_engine.py::test_approval_bypass_attempt PASSED
-backend/tests/test_security_engine.py::test_rejected_approval PASSED
-backend/tests/test_security_engine.py::test_expired_approval PASSED
-backend/tests/test_security_engine.py::test_pii_leakage_in_output PASSED
-backend/tests/test_security_engine.py::test_policy_engine_unavailable_fail_closed PASSED
-backend/tests/test_security_engine.py::test_security_api_endpoints PASSED
+backend/tests/test_agent_orchestrator.py (5 tests) ...................... PASSED [  8%]
+  - test_normal_agent_execution_persists_trace_and_spans ................ PASSED
+  - test_direct_prompt_injection_blocked_by_orchestrator ................ PASSED
+  - test_tool_execution_authorized ...................................... PASSED
+  - test_tool_execution_requiring_human_approval ........................ PASSED
+  - test_traces_and_agents_api_endpoints ................................ PASSED
 
-======================== 39 passed in 7.72s ========================
+backend/tests/test_e2e_integration.py (1 test) .......................... PASSED [ 10%]
+  - test_complete_platform_lifecycle_and_data_integrity ................. PASSED
+
+backend/tests/test_evaluation_engine.py (7 tests) ....................... PASSED [ 21%]
+  - test_percentile_latency_calculation ................................. PASSED
+  - test_confusion_matrix_calculations_and_zero_denominators ............ PASSED
+  - test_known_fixture_metrics_calculation .............................. PASSED
+  - test_fresh_install_zero_metrics ..................................... PASSED
+  - test_ragas_evaluation_engine_metrics ................................ PASSED
+  - test_regression_comparison_engine ................................... PASSED
+  - test_evaluations_and_dashboard_api_endpoints ........................ PASSED
+
+backend/tests/test_foundations.py (5 tests) ............................. PASSED [ 29%]
+  - test_settings_loaded ................................................ PASSED
+  - test_deterministic_mock_llm ......................................... PASSED
+  - test_deterministic_mock_llm_tool_simulation ......................... PASSED
+  - test_database_models_persistence .................................... PASSED
+  - test_fastapi_endpoints .............................................. PASSED
+
+backend/tests/test_langfuse_integration.py (13 tests) ................... PASSED [ 50%]
+  - test_to_langfuse_trace_id_normalization ............................. PASSED
+  - test_mask_secret_utility ............................................ PASSED
+  - test_sanitize_value_scrubbing ....................................... PASSED
+  - test_langfuse_service_disabled_mode ................................. PASSED
+  - test_langfuse_service_health_check_states ........................... PASSED
+  - test_mocked_langfuse_lifecycle ...................................... PASSED
+  - test_graceful_degradation_on_exception .............................. PASSED
+  - test_api_langfuse_status ............................................ PASSED
+  - test_api_langfuse_configuration ..................................... PASSED
+  - test_api_langfuse_test_connection ................................... PASSED
+  - test_api_langfuse_traces_and_metrics ................................ PASSED
+  - test_agent_execution_with_langfuse .................................. PASSED
+  - test_live_langfuse_cloud_connectivity ............................... PASSED
+
+backend/tests/test_multi_llm_execution.py (10 tests) .................... PASSED [ 66%]
+  - test_normal_rag_request_lifecycle ................................... PASSED
+  - test_prompt_injection_blocked_and_persisted ......................... PASSED
+  - test_unauthorized_tool_blocked_by_policy ............................ PASSED
+  - test_human_approval_workflow_lifecycle .............................. PASSED
+  - test_provider_health_check_contracts ................................ PASSED
+  - test_intelligent_provider_fallback_recording ........................ PASSED
+  - test_provider_outage_when_all_fail .................................. PASSED
+  - test_database_and_dashboard_consistency ............................. PASSED
+  - test_empty_corpus_safe_grounding .................................... PASSED
+  - test_output_validation_pii_redaction ................................ PASSED
+
+backend/tests/test_rag_subsystem.py (10 tests) .......................... PASSED [ 82%]
+  - test_document_loaders_txt_md_docx ................................... PASSED
+  - test_document_chunking .............................................. PASSED
+  - test_embedding_service .............................................. PASSED
+  - test_hybrid_retrieval_and_cross_encoder ............................. PASSED
+  - test_indirect_prompt_injection_guard ................................ PASSED
+  - test_agentic_rag_graph_execution_grounded ........................... PASSED
+  - test_agentic_rag_graph_poor_retrieval_retry_and_insufficient_evidence PASSED
+  - test_agentic_rag_empty_corpus ....................................... PASSED
+  - test_full_rag_api_lifecycle ......................................... PASSED
+
+backend/tests/test_security_engine.py (11 tests) ........................ PASSED [100%]
+  - test_normal_request_allowed ......................................... PASSED
+  - test_direct_prompt_injection_blocked ................................ PASSED
+  - test_jailbreak_attempt_blocked ...................................... PASSED
+  - test_indirect_injection_through_retrieved_documents ................. PASSED
+  - test_unauthorized_tool_invocation ................................... PASSED
+  - test_invalid_refund_amount .......................................... PASSED
+  - test_approval_bypass_attempt ........................................ PASSED
+  - test_rejected_approval .............................................. PASSED
+  - test_expired_approval ............................................... PASSED
+  - test_pii_leakage_in_output .......................................... PASSED
+  - test_policy_engine_unavailable_fail_closed .......................... PASSED
+  - test_security_api_endpoints ......................................... PASSED
+
+============================= 62 passed in 31.20s =============================
 ```
 
 ---

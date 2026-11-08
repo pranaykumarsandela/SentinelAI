@@ -251,7 +251,7 @@ class GeminiProvider(BaseLLMProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
-        self.api_key = api_key if api_key is not None else settings.GEMINI_API_KEY
+        self.api_key = api_key if api_key is not None else settings.effective_gemini_api_key
         self.model_name = model_name or settings.GEMINI_MODEL
         self.provider_name = "gemini"
         self._last_usage: Dict[str, Any] = {}
@@ -1029,15 +1029,47 @@ class OpenAIProvider(BaseLLMProvider):
             client = self._get_client()
             models = await asyncio.wait_for(client.models.list(), timeout=5.0)
             latency_ms = round((time.perf_counter() - start) * 1000, 2)
-            return {
-                "provider": "openai",
-                "model": self.model_name,
-                "connected": True,
-                "status": "HEALTHY",
-                "latency_ms": latency_ms,
-                "message": "Connected to OpenAI API",
-                "timestamp": time.time(),
-            }
+
+            # Probe completion to verify quota availability
+            try:
+                await asyncio.wait_for(
+                    client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=1,
+                    ),
+                    timeout=4.0,
+                )
+                return {
+                    "provider": "openai",
+                    "model": self.model_name,
+                    "connected": True,
+                    "status": "HEALTHY",
+                    "latency_ms": latency_ms,
+                    "message": "Connected to OpenAI API (Active & Funded)",
+                    "timestamp": time.time(),
+                }
+            except Exception as gen_err:
+                gen_msg = str(gen_err).lower()
+                if "quota" in gen_msg or "rate limit" in gen_msg or "429" in gen_msg or "credits" in gen_msg:
+                    return {
+                        "provider": "openai",
+                        "model": self.model_name,
+                        "connected": False,
+                        "status": "QUOTA_EXHAUSTED",
+                        "latency_ms": latency_ms,
+                        "message": "OpenAI API key authenticated, but billing quota is exhausted ($0 balance). Fallback routing active.",
+                        "timestamp": time.time(),
+                    }
+                return {
+                    "provider": "openai",
+                    "model": self.model_name,
+                    "connected": True,
+                    "status": "HEALTHY",
+                    "latency_ms": latency_ms,
+                    "message": f"Connected to OpenAI API ({str(gen_err)[:80]})",
+                    "timestamp": time.time(),
+                }
         except asyncio.TimeoutError:
             latency_ms = round((time.perf_counter() - start) * 1000, 2)
             return {
@@ -1082,7 +1114,7 @@ def get_llm_provider(
         return MockLLMProvider(model_name=model_name or settings.DEFAULT_LLM_MODEL)
 
     if prov == "gemini":
-        key = api_key if api_key is not None else settings.GEMINI_API_KEY
+        key = api_key if api_key is not None else settings.effective_gemini_api_key
         return GeminiProvider(api_key=key, model_name=model_name or settings.GEMINI_MODEL)
 
     if prov == "groq":

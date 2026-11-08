@@ -80,7 +80,7 @@ async def list_providers():
         ProviderStatusItem(
             provider="gemini",
             display_name="Google Gemini",
-            is_configured=bool(settings.GEMINI_API_KEY),
+            is_configured=bool(settings.effective_gemini_api_key),
             configured_model=settings.GEMINI_MODEL,
             supports_tools=True,
             supports_structured=True,

@@ -17,6 +17,18 @@ PRICING_CATALOG_V1: Dict[str, Any] = {
     "version": "2026.03.01",
     "last_updated": "2026-03-01T00:00:00Z",
     "models": {
+        "gemini-3.5-flash-lite": {
+            "input_per_million": 0.075,
+            "output_per_million": 0.30,
+        },
+        "gemini-3.1-flash-lite": {
+            "input_per_million": 0.075,
+            "output_per_million": 0.30,
+        },
+        "gemini-3.8-flash": {
+            "input_per_million": 0.075,
+            "output_per_million": 0.30,
+        },
         "gemini-2.5-flash": {
             "input_per_million": 0.075,
             "output_per_million": 0.30,
@@ -32,6 +44,14 @@ PRICING_CATALOG_V1: Dict[str, Any] = {
         "gemini-1.5-pro": {
             "input_per_million": 1.25,
             "output_per_million": 5.00,
+        },
+        "qwen/qwen3.8-27b": {
+            "input_per_million": 0.20,
+            "output_per_million": 0.20,
+        },
+        "openai/gpt-oss-20b": {
+            "input_per_million": 0.15,
+            "output_per_million": 0.15,
         },
         "llama-3.3-70b-versatile": {
             "input_per_million": 0.59,
@@ -75,6 +95,33 @@ PRICING_CATALOG_V1: Dict[str, Any] = {
 
 SUPPORTED_MODELS_ALLOWLIST: Dict[str, Dict[str, Any]] = {
     "gemini": {
+        "gemini-3.5-flash-lite": {
+            "display_name": "Google Gemini 3.5 Flash Lite",
+            "context_window": 1048576,
+            "supports_streaming": True,
+            "supports_tool_calling": True,
+            "supports_structured_output": True,
+            "supports_json_mode": True,
+            "is_default": True,
+        },
+        "gemini-3.1-flash-lite": {
+            "display_name": "Google Gemini 3.1 Flash Lite",
+            "context_window": 1048576,
+            "supports_streaming": True,
+            "supports_tool_calling": True,
+            "supports_structured_output": True,
+            "supports_json_mode": True,
+            "is_default": False,
+        },
+        "gemini-3.8-flash": {
+            "display_name": "Google Gemini 3.8 Flash",
+            "context_window": 1048576,
+            "supports_streaming": True,
+            "supports_tool_calling": True,
+            "supports_structured_output": True,
+            "supports_json_mode": True,
+            "is_default": False,
+        },
         "gemini-2.5-flash": {
             "display_name": "Google Gemini 2.5 Flash",
             "context_window": 1048576,
@@ -82,7 +129,7 @@ SUPPORTED_MODELS_ALLOWLIST: Dict[str, Dict[str, Any]] = {
             "supports_tool_calling": True,
             "supports_structured_output": True,
             "supports_json_mode": True,
-            "is_default": True,
+            "is_default": False,
         },
         "gemini-2.5-pro": {
             "display_name": "Google Gemini 2.5 Pro",
@@ -113,6 +160,24 @@ SUPPORTED_MODELS_ALLOWLIST: Dict[str, Dict[str, Any]] = {
         },
     },
     "groq": {
+        "qwen/qwen3.8-27b": {
+            "display_name": "Qwen 3.8 27B",
+            "context_window": 32768,
+            "supports_streaming": True,
+            "supports_tool_calling": True,
+            "supports_structured_output": True,
+            "supports_json_mode": True,
+            "is_default": True,
+        },
+        "openai/gpt-oss-20b": {
+            "display_name": "GPT-OSS 20B",
+            "context_window": 32768,
+            "supports_streaming": True,
+            "supports_tool_calling": True,
+            "supports_structured_output": True,
+            "supports_json_mode": True,
+            "is_default": False,
+        },
         "llama-3.3-70b-versatile": {
             "display_name": "Llama 3.3 70B Versatile",
             "context_window": 128000,
@@ -120,7 +185,7 @@ SUPPORTED_MODELS_ALLOWLIST: Dict[str, Dict[str, Any]] = {
             "supports_tool_calling": True,
             "supports_structured_output": True,
             "supports_json_mode": True,
-            "is_default": True,
+            "is_default": False,
         },
         "llama-3.1-8b-instant": {
             "display_name": "Llama 3.1 8B Instant",
@@ -369,3 +434,4 @@ class ModelRouter:
 
 
 model_router = ModelRouter()
+

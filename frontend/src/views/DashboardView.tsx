@@ -84,7 +84,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     );
   }
 
-  if (!metrics || metrics.is_fresh_install) {
+  const isFreshInstall =
+    !metrics ||
+    metrics.is_fresh_install ||
+    (metrics as any).is_fresh_install_zero_state ||
+    (metrics.total_requests ?? 0) === 0;
+
+  if (isFreshInstall) {
     return (
       <div className="space-y-6">
         <div>
@@ -110,24 +116,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     );
   }
 
+  const successfulReqs = metrics.successful_requests ?? 0;
+  const blockedReqs = metrics.blocked_requests ?? 0;
+  const failedReqs = metrics.failed_requests ?? 0;
+  const totalReqs = metrics.total_requests ?? 0;
+  const liveReqs = metrics.live_requests ?? 0;
+  const mockReqs = metrics.mock_requests ?? 0;
+
   // Real chart data sourced strictly from DB metrics
   const statusChartData = [
-    { name: 'Successful', value: metrics.successful_requests, color: '#10B981' },
-    { name: 'Blocked', value: metrics.blocked_requests, color: '#EF4444' },
-    { name: 'Failed', value: metrics.failed_requests, color: '#F59E0B' },
+    { name: 'Successful', value: successfulReqs, color: '#10B981' },
+    { name: 'Blocked', value: blockedReqs, color: '#EF4444' },
+    { name: 'Failed', value: failedReqs, color: '#F59E0B' },
   ].filter((d) => d.value > 0);
 
+  const avgLatency = metrics.average_latency_ms ?? (metrics as any).avg_latency_ms ?? 0;
+  const medianLatency = metrics.median_latency_ms ?? 0;
+  const p95Latency = metrics.p95_latency_ms ?? 0;
+  const p99Latency = metrics.p99_latency_ms ?? 0;
+
   const latencyChartData = [
-    { metric: 'Avg', latency: metrics.average_latency_ms },
-    { metric: 'Median (P50)', latency: metrics.median_latency_ms },
-    { metric: 'P95', latency: metrics.p95_latency_ms },
-    { metric: 'P99', latency: metrics.p99_latency_ms },
+    { metric: 'Avg', latency: avgLatency },
+    { metric: 'Median (P50)', latency: medianLatency },
+    { metric: 'P95', latency: p95Latency },
+    { metric: 'P99', latency: p99Latency },
   ];
 
-  const successRateText =
-    metrics.execution_success_rate !== null ? `${metrics.execution_success_rate}%` : 'N/A';
-  const blockedRateText =
-    metrics.blocked_request_rate !== null ? `${metrics.blocked_request_rate}%` : 'N/A';
+  const rawSuccessRate = metrics.execution_success_rate ?? (metrics as any).success_rate_percent ?? null;
+  const successRateText = rawSuccessRate !== null && rawSuccessRate !== undefined ? `${rawSuccessRate}%` : 'N/A';
+  const rawBlockedRate = metrics.blocked_request_rate ?? (metrics as any).blocked_rate_percent ?? null;
+  const blockedRateText = rawBlockedRate !== null && rawBlockedRate !== undefined ? `${rawBlockedRate}%` : 'N/A';
+
+  const totalTokens = metrics.total_tokens ?? (metrics as any).total_tokens_consumed ?? 0;
+  const promptTokens = metrics.prompt_tokens ?? 0;
+  const completionTokens = metrics.completion_tokens ?? 0;
+  const pendingApprovals = metrics.pending_approvals ?? 0;
 
   return (
     <div className="space-y-6">
@@ -143,9 +166,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg">
           <span>Partitions:</span>
-          <strong className="text-emerald-400 font-mono">{metrics.live_requests} Live</strong>
+          <strong className="text-emerald-400 font-mono">{liveReqs} Live</strong>
           <span className="text-gray-600">/</span>
-          <strong className="text-amber-400 font-mono">{metrics.mock_requests} Mock</strong>
+          <strong className="text-amber-400 font-mono">{mockReqs} Mock</strong>
         </div>
       </div>
 
@@ -153,32 +176,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Total Requests"
-          value={metrics.total_requests}
+          value={totalReqs}
           icon={<Activity className="w-4 h-4 text-blue-400" />}
-          badge={`${metrics.live_requests} Live / ${metrics.mock_requests} Mock`}
+          badge={`${liveReqs} Live / ${mockReqs} Mock`}
           badgeColor="blue"
         />
         <MetricCard
           title="Execution Success"
           value={successRateText}
-          subtitle={`${metrics.successful_requests} successful / ${metrics.failed_requests} failed`}
+          subtitle={`${successfulReqs} successful / ${failedReqs} failed`}
           icon={<ShieldCheck className="w-4 h-4 text-emerald-400" />}
-          badge={metrics.successful_requests > 0 ? 'HEALTHY' : 'PENDING'}
+          badge={successfulReqs > 0 ? 'HEALTHY' : 'PENDING'}
           badgeColor="green"
         />
         <MetricCard
           title="Security Defense"
           value={blockedRateText}
-          subtitle={`${metrics.blocked_requests} requests blocked by firewall`}
+          subtitle={`${blockedReqs} requests blocked by firewall`}
           icon={<ShieldAlert className="w-4 h-4 text-rose-400" />}
-          badge={metrics.blocked_requests > 0 ? 'DEFENSE ACTIVE' : 'CLEAR'}
-          badgeColor={metrics.blocked_requests > 0 ? 'red' : 'gray'}
+          badge={blockedReqs > 0 ? 'DEFENSE ACTIVE' : 'CLEAR'}
+          badgeColor={blockedReqs > 0 ? 'red' : 'gray'}
         />
         <MetricCard
           title="Latency (P95)"
-          value={metrics.p95_latency_ms}
+          value={p95Latency}
           unit="ms"
-          subtitle={`Median: ${metrics.median_latency_ms} ms / Avg: ${metrics.average_latency_ms} ms`}
+          subtitle={`Median: ${medianLatency} ms / Avg: ${avgLatency} ms`}
           icon={<Clock className="w-4 h-4 text-amber-400" />}
           badge="SPAN TELEMETRY"
           badgeColor="amber"
@@ -189,25 +212,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard
           title="Token Consumption"
-          value={metrics.total_tokens.toLocaleString()}
-          subtitle={`${metrics.prompt_tokens.toLocaleString()} prompt / ${metrics.completion_tokens.toLocaleString()} completion`}
+          value={totalTokens.toLocaleString()}
+          subtitle={`${promptTokens.toLocaleString()} prompt / ${completionTokens.toLocaleString()} completion`}
           icon={<Cpu className="w-4 h-4 text-purple-400" />}
         />
         <MetricCard
           title="Security Interceptions"
-          value={metrics.blocked_requests}
+          value={blockedReqs}
           subtitle="Direct injection, jailbreaks, PII"
           icon={<ShieldAlert className="w-4 h-4 text-rose-400" />}
-          badge={metrics.blocked_requests > 0 ? 'INTERCEPTED' : 'CLEAN'}
-          badgeColor={metrics.blocked_requests > 0 ? 'red' : 'green'}
+          badge={blockedReqs > 0 ? 'INTERCEPTED' : 'CLEAN'}
+          badgeColor={blockedReqs > 0 ? 'red' : 'green'}
         />
         <MetricCard
           title="Pending Approvals"
-          value={metrics.pending_approvals}
+          value={pendingApprovals}
           subtitle="Human review queue"
           icon={<Clock className="w-4 h-4 text-blue-400" />}
-          badge={metrics.pending_approvals > 0 ? 'ACTION REQUIRED' : 'UP TO DATE'}
-          badgeColor={metrics.pending_approvals > 0 ? 'amber' : 'green'}
+          badge={pendingApprovals > 0 ? 'ACTION REQUIRED' : 'UP TO DATE'}
+          badgeColor={pendingApprovals > 0 ? 'amber' : 'green'}
         />
       </div>
 

@@ -23,6 +23,7 @@ try:
         FallbackRouteItem,
     )
     from backend.app.observability.logger import sentinel_logger
+    from backend.app.observability.langfuse_service import langfuse_service
 except ImportError:
     from app.core.config import settings
     from app.models.entities import (
@@ -180,6 +181,38 @@ class MultiLLMGateway:
                         await db.rollback()
 
                 successful_response = resp
+
+                # Record generation telemetry to Langfuse
+                if trace_id:
+                    try:
+                        cost = model_router.calculate_cost(candidate.model, resp.input_tokens, resp.output_tokens)
+                        langfuse_service.record_llm_generation(
+                            trace_id=trace_id,
+                            name=f"LLM Generation: {candidate.provider}/{candidate.model}",
+                            provider=candidate.provider,
+                            model=candidate.model,
+                            prompt_text=prompt,
+                            completion_text=resp.content,
+                            input_tokens=resp.input_tokens,
+                            output_tokens=resp.output_tokens,
+                            total_tokens=resp.total_tokens,
+                            latency_ms=latency_ms,
+                            cost_usd=cost,
+                            provider_request_id=resp.provider_request_id,
+                            finish_reason=resp.finish_reason,
+                            is_mock=resp.is_mock,
+                            fallback_occurred=(attempt_number > 1),
+                            temperature=temperature,
+                            metadata={
+                                "task_type": task_type,
+                                "attempt_number": attempt_number,
+                                "agent_id": agent_id,
+                                "request_id": request_id,
+                            },
+                        )
+                    except Exception as lf_err:
+                        sentinel_logger.debug(f"Langfuse hook error in llm_gateway: {lf_err}")
+
                 break
 
             except LLMProviderError as pe:
@@ -306,3 +339,4 @@ class MultiLLMGateway:
 
 
 multi_llm_gateway = MultiLLMGateway()
+

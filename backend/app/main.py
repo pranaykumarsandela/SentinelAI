@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
 from backend.app.core.database import Base, engine
 from backend.app.api.v1.router import api_v1_router
+from backend.app.observability.langfuse_service import langfuse_service
 
 
 @asynccontextmanager
@@ -11,8 +12,11 @@ async def lifespan(app: FastAPI):
     # Startup: ensure tables are created in development/SQLite
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Initialize observability service
+    langfuse_service.initialize()
     yield
-    # Shutdown: dispose database engine connections cleanly
+    # Shutdown: flush observability telemetry and dispose database engine cleanly
+    langfuse_service.shutdown()
     await engine.dispose()
 
 

@@ -199,6 +199,16 @@ export const TraceExplorerView: React.FC<TraceExplorerViewProps> = ({ initialTra
                     <span className="font-mono text-xs text-gray-400">{selectedTrace.id}</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <a
+                      href={`https://us.cloud.langfuse.com/project/cmw1pfxgz00fsad0eajchjmb3/traces/${selectedTrace.id.replace(/-/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/40 text-xs font-semibold text-orange-300 transition-colors"
+                      title="Open trace in Langfuse Cloud dashboard"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      View in Langfuse
+                    </a>
                     <button
                       onClick={() => handleExport(selectedTrace.id)}
                       disabled={exporting}
